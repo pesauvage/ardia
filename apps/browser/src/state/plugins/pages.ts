@@ -7,15 +7,53 @@ import { activeTabId, viewTabIds } from "../browser/model";
 import { openSplitPane } from "../splits/actions";
 import { notePlugin } from "../telemetry/pluginCounts";
 import { isPagePath, pluginPageOf, pluginPagePath, pluginPageUrl } from "./pageNames";
-import { activeManifest, currentPlugins, type PluginsStore } from "./store";
+import { activeManifest, currentPlugins, usePlugins, type PluginsStore } from "./store";
 import { eligibleKind, isEligibleTab } from "../automation/automationWindows";
 
 export { isPagePath, pluginPageOf, pluginPagePath, pluginPageUrl };
 
 export type PageContext = { tabId: string; url: string; title: string };
+type HandedContext = { plugin: string; approved: string; pageUrl: string; context: PageContext };
 
-export const usePluginPages = create<{ contexts: Record<string, PageContext> }>()(() => ({ contexts: {} }));
+export const usePluginPages = create<{ contexts: Record<string, HandedContext> }>()(() => ({ contexts: {} }));
 
+function isLive(handed: HandedContext, tabId: string): boolean {
+  const plugins = currentPlugins();
+  return (
+    useBrowser.getState().tabs[tabId]?.url === handed.pageUrl &&
+    !!activeManifest(plugins, handed.plugin)?.permissions.includes("tabs") &&
+    plugins.records[handed.plugin]?.approved === handed.approved
+  );
+}
+
+export function pageContextOf(tabId: string): PageContext | null {
+  const handed = usePluginPages.getState().contexts[tabId];
+  return handed && isLive(handed, tabId) ? handed.context : null;
+}
+
+export function dropStalePageContexts() {
+  const { contexts } = usePluginPages.getState();
+  const stale = Object.keys(contexts).filter((tabId) => !isLive(contexts[tabId]!, tabId));
+  if (!stale.length) return;
+  usePluginPages.setState((p) => {
+    const kept = { ...p.contexts };
+    for (const tabId of stale) delete kept[tabId];
+    return { contexts: kept };
+  });
+}
+
+let watchingContexts = false;
+
+export function watchPageContexts() {
+  if (watchingContexts) return;
+  watchingContexts = true;
+  useBrowser.subscribe((s, prev) => {
+    if (s.tabs !== prev.tabs) dropStalePageContexts();
+  });
+  usePlugins.subscribe((s, prev) => {
+    if (s.records !== prev.records || s.listings !== prev.listings) dropStalePageContexts();
+  });
+}
 
 function withParam(url: string, key: string, value: string): string {
   const cut = url.indexOf("#");
@@ -36,7 +74,11 @@ export function pageViewUrl(s: Pick<PluginsStore, "listings" | "records" | "serv
   const file = "file" in page.source ? `ardia-plugin://${name}/${page.source.file.split("/").map(encodeURIComponent).join("/")}` : null;
   const served = file ? null : (s.servedUrls[name] ?? null);
   let url = file ? (path ? withParam(file, "ardiaPath", path) : file) : served ? servedAt(served, path) : null;
-  if (url && context) url = withParam(url, "ardiaContext", JSON.stringify(context));
+  const permissions = activeManifest(s, name)?.permissions ?? [];
+  if (url && context && permissions.includes("tabs")) {
+    const shown = permissions.includes("fullUrls") ? context : { ...context, url: minimizedUrl(context.url) };
+    url = withParam(url, "ardiaContext", JSON.stringify(shown));
+  }
   return url;
 }
 
@@ -45,7 +87,7 @@ function contextOf(name: string, tabId: string | null): PageContext | null {
   const s = useBrowser.getState();
   const tab = tabId ? s.tabs[tabId] : undefined;
   if (!m || !tab || !m.permissions.includes("tabs") || !isEligibleTab(s, tab.id) || pluginPageOf(tab.url)) return null;
-  return { tabId: tab.id, url: m.permissions.includes("fullUrls") ? tab.url : minimizedUrl(tab.url), title: tab.customTitle || tab.title };
+  return { tabId: tab.id, url: tab.url, title: tab.customTitle || tab.title };
 }
 
 export function openPluginPage(windowId: string, name: string, how: { split?: boolean; side?: PageSide; context?: boolean; path?: string } = {}): string | null {
@@ -73,9 +115,11 @@ export function openPluginPage(windowId: string, name: string, how: { split?: bo
   }
   if (!tabId) return null;
   notePlugin("plugin_page_opens");
+  const approved = currentPlugins().records[name]?.approved ?? "";
+  const pageUrl = useBrowser.getState().tabs[tabId]?.url ?? url;
   usePluginPages.setState((p) => {
     const contexts = { ...p.contexts };
-    if (context) contexts[tabId] = context;
+    if (context) contexts[tabId] = { plugin: name, approved, pageUrl, context };
     else delete contexts[tabId];
     return { contexts };
   });

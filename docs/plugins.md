@@ -119,7 +119,9 @@ names the tab and `icon` its command bar entry. The tab's content is one of:
 A page tab can have a path, `ardia://<name>/<path>?<query>` (`ardia://ai/history`, `ardia://ai/chats/42`): each path
 is its own tab, and opening one that's already open in the window goes to it. A file page gets the path and query as
 `ardiaPath`; a served page loads them on its helper's server. When a command hands the page a tab, the page's URL
-carries it as `ardiaContext`, a JSON object `{"tabId", "url", "title"}`. Navigation inside the page doesn't change the
+carries it as `ardiaContext`, a JSON object `{"tabId", "url", "title"}`, its URL cut to the plugin's permissions when
+the page loads. The context belongs to that page tab, that plugin and that approval: it goes when the tab leaves the
+address it was opened at, and when the plugin is turned off, changes or is approved again. Navigation inside the page doesn't change the
 tab's address, title or back and forward yet (follow-up issue). While the plugin is off, changed or not running, the tab stays and says so, with a way to Settings; it is
 never sent to Chrome. A plugin with a page can't take the name of one of Ardia's or Chrome's own pages (`history`,
 `settings`, `flags`, `extensions`, … `lib/pluginNames.ts`).
