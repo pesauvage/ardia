@@ -148,7 +148,7 @@ test("hook events reach a subscribed helper, with minimized URLs", async () => {
 test("a command calls the plugin's tool and shows its message; the result goes back to the caller", async () => {
   const run = await enabled();
   const actions = pluginBarActions(P()).map((a) => a.id);
-  assert.deepEqual(actions, ["plugin:example/page", "plugin:example/say-hello", "plugin:example/new-tab", "plugin:example/beside"]);
+  assert.deepEqual(actions, ["plugin:example/:page", "plugin:example/say-hello", "plugin:example/new-tab", "plugin:example/beside"]);
   const w = S().createWindow({ url: "https://a.example/" });
   const ran = runPluginAction("plugin:example/say-hello", w);
   await settle();
@@ -434,5 +434,23 @@ test("a page's context belongs to the plugin, the address and the approval it wa
   assert.equal(pageContextOf(page), null, "and coming back doesn't bring it back");
   const anyContext = { tabId: reading, url: "https://a.example/read?token=1", title: "Reading" };
   assert.doesNotMatch(decodeURIComponent(pageViewUrl(P(), "example", anyContext)), /token=1/, "the URL is built with the plugin's own permissions");
+  lifecycle.disablePlugin("example");
+});
+
+test("a command named page doesn't collide with the page's own entry", async () => {
+  const doc = JSON.parse(FIXTURE);
+  doc.commands.push({ name: "page", title: "Say Page", tool: "hello" });
+  await install(JSON.stringify(doc));
+  assert.ok(lifecycle.requestPluginConsent("example") && lifecycle.enablePlugin("example", P().consent.hash));
+  await settle();
+  const ids = pluginBarActions(P()).map((a) => a.id);
+  assert.equal(new Set(ids).size, ids.length, "every entry has its own id");
+  const w = S().createWindow({ url: "https://a.example/" });
+  const tabs = Object.keys(S().tabs).length;
+  const calls = host.events.length;
+  void runPluginAction("plugin:example/page", w);
+  await settle();
+  assert.equal(Object.keys(S().tabs).length, tabs, "the command doesn't open the page");
+  assert.ok(host.events.slice(calls).some((e) => JSON.parse(e.line).tool === "hello"), "it calls its tool");
   lifecycle.disablePlugin("example");
 });

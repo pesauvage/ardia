@@ -12,12 +12,13 @@ import { eligibleKind } from "../automation/automationWindows";
 
 export const PLUGIN_ACTION_PREFIX = "plugin:";
 const MESSAGE_LIMIT = 200;
+const PAGE_ACTION = ":page";
 
 export function pluginBarActions(s: Pick<PluginsStore, "listings" | "records" | "order">): BarAction[] {
   const out: BarAction[] = [];
   for (const name of activeNames(s)) {
     const m = activeManifest(s, name)!;
-    if (m.page) out.push({ id: `${PLUGIN_ACTION_PREFIX}${name}/page`, title: `Open ${m.page.title}`, icon: m.page.icon, keywords: [m.title, "plugin"] });
+    if (m.page) out.push({ id: `${PLUGIN_ACTION_PREFIX}${name}/${PAGE_ACTION}`, title: `Open ${m.page.title}`, icon: m.page.icon, keywords: [m.title, "plugin"] });
     for (const c of m.commands) out.push({ id: `${PLUGIN_ACTION_PREFIX}${name}/${c.name}`, title: c.title, icon: c.icon, keywords: [...c.keywords, m.title] });
   }
   return out;
@@ -58,7 +59,7 @@ export async function runPluginAction(id: string, windowId: string): Promise<voi
   const action = rest.slice(slash + 1);
   const m = activeManifest(currentPlugins(), name);
   if (!m) return;
-  if (action === "page") return void openPluginPage(windowId, name);
+  if (action === PAGE_ACTION) return void openPluginPage(windowId, name);
   const command = m.commands.find((c) => c.name === action);
   if (command) await runCommandSpec(name, m.title, command, windowId);
 }
