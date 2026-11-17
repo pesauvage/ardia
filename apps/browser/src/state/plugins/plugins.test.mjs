@@ -344,6 +344,7 @@ test("pages take a path: each path is its own tab, and a helper opens them with 
 test("a served page keeps its server's fragment when it gets a path or a context", async () => {
   const served = JSON.parse(FIXTURE);
   served.page = { title: "Served", served: true };
+  served.permissions.push("network");
   await install(JSON.stringify(served));
   assert.ok(lifecycle.requestPluginConsent("example"));
   assert.ok(lifecycle.enablePlugin("example", P().consent.hash));

@@ -17,13 +17,6 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   static let offlinePolicy =
     "default-src 'self' ardia-plugin: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ardia-plugin: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; form-action 'self'; worker-src 'none'"
 
-  static func offlineScript() -> WKUserScript {
-    let source = """
-      (() => { if (location.protocol === "ardia-plugin:") return; const m = document.createElement("meta"); m.httpEquiv = "Content-Security-Policy"; m.content = \(String(reflecting: offlinePolicy)); (document.head || document.documentElement || document).prepend(m); })();
-      """
-    return WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: false)
-  }
-
   private var web: WKWebView?
   private var allowedOrigin: (scheme: String, host: String, port: Int?)?
 
@@ -54,7 +47,6 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     configuration.setURLSchemeHandler(PluginSchemeHandler(plugin: plugin, policy: network ? nil : Self.offlinePolicy), forURLScheme: PluginSchemeHandler.scheme)
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
     configuration.mediaTypesRequiringUserActionForPlayback = .all
-    if !network { configuration.userContentController.addUserScript(Self.offlineScript()) }
     let view = WKWebView(frame: bounds, configuration: configuration)
     view.navigationDelegate = self
     view.uiDelegate = self
@@ -90,7 +82,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     guard let web, let target = URL(string: url), let origin = Self.origin(of: target) else { return }
     let isPage = origin.scheme == PluginSchemeHandler.scheme && origin.host == plugin
     let isLoopback = origin.scheme == "http" && ["127.0.0.1", "localhost", "::1", "[::1]"].contains(origin.host) && origin.port != nil
-    guard isPage || isLoopback else { return }
+    guard isPage || (isLoopback && network) else { return }
     allowedOrigin = origin
     web.load(URLRequest(url: target))
   }

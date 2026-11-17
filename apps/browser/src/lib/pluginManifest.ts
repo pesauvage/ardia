@@ -327,13 +327,10 @@ export function checkManifest(raw: Fields): { manifest: PluginManifest | null; p
       c.problems.push(`commands[${i}].sideSetting must name a choice row whose values are left, right, top or bottom`);
   });
   if (page && name && RESERVED_PAGE_NAMES.includes(name)) c.problems.push(`name: ${name} is one of Ardia's own pages (ardia://${name}), so a plugin with a page can't use it`);
-  const needsProcess: [string, boolean][] = [
-    ["tool commands", commands.some((x) => "tool" in x.action)],
-    ["tools", tools.length > 0],
-    ["hooks", hooks.length > 0],
-    ["page.served", page?.source && "served" in page.source ? true : false],
-  ];
+  const served = !!page && "served" in page.source;
+  const needsProcess: [string, boolean][] = [["tool commands", commands.some((x) => "tool" in x.action)], ["tools", tools.length > 0], ["hooks", hooks.length > 0], ["page.served", served]];
   for (const [what, used] of needsProcess) if (used && !process) c.problems.push(`${what} needs a process`);
+  if (served && !permissions.includes("network")) c.problems.push("page.served needs the network permission: Ardia can't hold a page its helper serves to this Mac");
   if (c.problems.length || !name || !title) return { manifest: null, problems: c.problems };
   return {
     manifest: { manifest: MANIFEST_VERSION, name, title, description, version, requires, permissions, settings, commands, page, process, hooks, tools },

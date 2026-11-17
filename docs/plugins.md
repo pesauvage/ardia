@@ -112,7 +112,8 @@ names the tab and `icon` its command bar entry. The tab's content is one of:
   their type from the extension; anything else is a 404.
 - `"served": true`: the helper serves it and tells Ardia where with `page.serve` (below). The URL must be
   `http://127.0.0.1:<port>/…`, `http://localhost:<port>/…` or `http://[::1]:<port>/…`. Until it arrives the tab says the
-  plugin is starting.
+  plugin is starting. A served page needs the `network` permission: its server's responses (a redirect, a `Link`
+  preload header) start requests before any policy in the page can apply, so Ardia can't hold it to this Mac.
 
 A page tab can have a path, `ardia://<name>/<path>?<query>` (`ardia://ai/history`, `ardia://ai/chats/42`): each path
 is its own tab, and opening one that's already open in the window goes to it. A file page gets the path and query as
@@ -254,9 +255,9 @@ whichever profile the tab's window shows:
 - **Away from Ardia's interface.** It runs in WebKit's own processes with no script message handlers, so the page can't
   reach the interface's JavaScript, the store or any native call. It gets no camera, microphone or location, downloads
   are refused, and its JavaScript dialogs are ignored.
-- **Its network follows the plugin's.** Without `network`, the page's own requests (scripts, images, `fetch`,
-  WebSockets) may only reach its own origin and this Mac, and it can't start workers: a file page gets a Content Security Policy in its response
-  header, a helper-served page the same policy as a meta tag at document start.
+- **Its network follows the plugin's.** Without `network`, a file page's own requests (scripts, images, `fetch`,
+  WebSockets) may only reach its own origin and this Mac, and it can't start workers: Ardia sends a Content Security
+  Policy in every response header. A helper-served page always has `network` (above).
 - **Stays on its origin.** Its own origin may navigate freely; a link you click to any other http(s) address opens
   as a new tab in the window's profile (where your cookies apply, as for any link you open), and every other
   navigation, a pop-up or a `window.open` included, is cancelled.
