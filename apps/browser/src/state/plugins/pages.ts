@@ -8,6 +8,7 @@ import { openSplitPane } from "../splits/actions";
 import { notePlugin } from "../telemetry/pluginCounts";
 import { isPagePath, pluginPageOf, pluginPagePath, pluginPageUrl } from "./pageNames";
 import { activeManifest, currentPlugins, type PluginsStore } from "./store";
+import { eligibleKind, isEligibleTab } from "../automation/automationWindows";
 
 export { isPagePath, pluginPageOf, pluginPagePath, pluginPageUrl };
 
@@ -41,8 +42,9 @@ export function pageViewUrl(s: Pick<PluginsStore, "listings" | "records" | "serv
 
 function contextOf(name: string, tabId: string | null): PageContext | null {
   const m = activeManifest(currentPlugins(), name);
-  const tab = tabId ? useBrowser.getState().tabs[tabId] : undefined;
-  if (!m || !tab || !m.permissions.includes("tabs") || pluginPageOf(tab.url)) return null;
+  const s = useBrowser.getState();
+  const tab = tabId ? s.tabs[tabId] : undefined;
+  if (!m || !tab || !m.permissions.includes("tabs") || !isEligibleTab(s, tab.id) || pluginPageOf(tab.url)) return null;
   return { tabId: tab.id, url: m.permissions.includes("fullUrls") ? tab.url : minimizedUrl(tab.url), title: tab.customTitle || tab.title };
 }
 
@@ -51,7 +53,7 @@ export function openPluginPage(windowId: string, name: string, how: { split?: bo
   const path = how.path ?? "";
   if (!isPagePath(path)) return null;
   const s = useBrowser.getState();
-  if (!s.windows[windowId]) return null;
+  if (!eligibleKind(s, windowId)) return null;
   const url = pluginPageUrl(name, path);
   const anchor = activeTabId(s, windowId);
   const existing = viewTabIds(s, windowId).find((id) => {

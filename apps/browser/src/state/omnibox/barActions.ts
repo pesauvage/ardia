@@ -13,6 +13,7 @@ import { muteState, muteTitle, siteMuteTitle } from "../tabs/mute";
 import { isWebPageUrl } from "../../lib/url";
 import { pluginActionsRevision, pluginBarActions } from "../plugins/commands";
 import { currentPlugins } from "../plugins/store";
+import { eligibleKind } from "../automation/automationWindows";
 
 type Context = { s: BrowserState; windowId: string; tab: Tab | undefined };
 
@@ -141,7 +142,7 @@ export function barActions(s: BrowserState, windowId: string): CommandAction[] {
     });
   }
   out.push(...organizeActions(s, windowId));
-  out.push(...pluginBarActions(currentPlugins()));
+  if (eligibleKind(s, windowId)) out.push(...pluginBarActions(currentPlugins()));
   return out;
 }
 

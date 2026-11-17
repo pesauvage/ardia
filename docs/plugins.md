@@ -99,7 +99,8 @@ command does one of two things:
   current tab (its id, title and URL, without the query and fragment unless the plugin has `fullUrls`), and needs
   `tabs`. `path` (`/history`, `/chats/new?mode=split`) opens the page there.
 
-A plugin with a `page` also gets "Open `<page title>`" for free.
+A plugin with a `page` also gets "Open `<page title>`" for free. Plugin commands aren't offered in private windows, and a page
+is never handed a private tab or a Peek: the same tabs hooks and the `ardia` command never see (`docs/automation.md`).
 
 ### page
 

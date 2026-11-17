@@ -8,6 +8,7 @@ const { usePlugins, activeManifest, needsReview } = await import("./store.ts");
 const lifecycle = await import("./lifecycle.ts");
 const { pluginBarActions, runPluginAction } = await import("./commands.ts");
 const { usePluginPages, pageViewUrl, openPluginPage } = await import("./pages.ts");
+const { barActions } = await import("../omnibox/barActions.ts");
 const { isInternalTab } = await import("../pages/urls.ts");
 const { processExited, CRASH_LIMIT } = await import("./process.ts");
 const { callTool } = await import("./tools.ts");
@@ -392,4 +393,19 @@ test("a stopped helper's requests are ignored and its pending calls fail at once
   stub.emitPluginLine({ name: "example", run, line: JSON.stringify({ id: 1, method: "run", params: { command: "newTab" } }) });
   await settle();
   assert.equal(host.replies.length, before, "nothing answers, nothing runs");
+});
+
+test("plugin commands stay out of private windows and never hand a private tab to a page", async () => {
+  await enabled();
+  const normal = S().createWindow({ url: "https://a.example/" });
+  assert.ok(barActions(S(), normal).some((a) => a.id.startsWith("plugin:example/")));
+  const w = S().createWindow({ kind: "private", url: "https://secret.example/a" });
+  const secret = S().windows[w].tabIds[0];
+  S().updateTab(secret, { url: "https://secret.example/a", title: "Secret" });
+  assert.equal(barActions(S(), w).some((a) => a.id.startsWith("plugin:")), false, "no plugin entries in a private window");
+  const tabs = Object.keys(S().tabs).length;
+  await runPluginAction("plugin:example/beside", w);
+  assert.equal(Object.keys(S().tabs).length, tabs, "running one there opens nothing");
+  assert.equal(openPluginPage(w, "example", { split: true, context: true }), null);
+  lifecycle.disablePlugin("example");
 });

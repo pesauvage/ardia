@@ -7,6 +7,8 @@ import { activeManifest, activeNames, currentPlugins, type PluginsStore } from "
 import { callTool } from "./tools";
 import { openPluginPage } from "./pages";
 import { valuesFor } from "./values";
+import { useBrowser } from "../browser/store";
+import { eligibleKind } from "../automation/automationWindows";
 
 export const PLUGIN_ACTION_PREFIX = "plugin:";
 const MESSAGE_LIMIT = 200;
@@ -48,6 +50,7 @@ async function runCommandSpec(name: string, title: string, command: CommandSpec,
 }
 
 export async function runPluginAction(id: string, windowId: string): Promise<void> {
+  if (!eligibleKind(useBrowser.getState(), windowId)) return;
   const rest = id.slice(PLUGIN_ACTION_PREFIX.length);
   const slash = rest.indexOf("/");
   if (slash < 0) return;
