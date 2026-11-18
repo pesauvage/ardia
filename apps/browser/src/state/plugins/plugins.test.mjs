@@ -497,3 +497,19 @@ test("two quick restarts start the helper once", async () => {
   assert.equal(P().processes.example.state, "running");
   lifecycle.disablePlugin("example");
 });
+
+test("removing a plugin waits for its helper to stop before deleting its files", async () => {
+  await enabled();
+  let release;
+  host.stopGate = new Promise((resolve) => (release = resolve));
+  try {
+    const removing = lifecycle.removePlugin("example");
+    await settle();
+    assert.deepEqual(host.removed, [], "nothing is deleted while the helper is still stopping");
+    release();
+    assert.deepEqual(await removing, { ok: true });
+    assert.deepEqual(host.removed, ["example"]);
+  } finally {
+    host.stopGate = null;
+  }
+});

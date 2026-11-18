@@ -121,11 +121,15 @@ final class PluginHost {
         let problem = PluginFolders.current().map { $0.remove(name) } ?? "Ardia has no data folder."
         DispatchQueue.main.async { done(problem) }
       }
-      if let process = processes.removeValue(forKey: name) {
-        retire(process)
-        process.stop(graceMs: 1000, done: { finish() })
-      } else {
-        finish()
+      if let process = processes.removeValue(forKey: name) { retire(process) }
+      let running = retiring.values.filter { $0.name == name }
+      guard !running.isEmpty else { return finish() }
+      var left = running.count
+      for process in running {
+        process.stop(graceMs: 1000) {
+          left -= 1
+          if left == 0 { finish() }
+        }
       }
     }
   }

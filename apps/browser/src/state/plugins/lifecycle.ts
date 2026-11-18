@@ -8,7 +8,7 @@ import { listingOf } from "./appChecks";
 import { applyDefaults, claimsOf, restoreDefaults, spliceApplied } from "./defaults";
 import { writePluginRecords } from "./savedState";
 import { activeManifest, currentPlugins, NO_RECORD, recordOf, usePlugins, type PluginListing, type PluginRecord } from "./store";
-import { stopProcess, superviseProcess, supervisedNames } from "./process";
+import { processStopped, stopProcess, superviseProcess, supervisedNames } from "./process";
 import { dropCalls } from "./tools";
 import { sendValues } from "./channel";
 
@@ -134,6 +134,7 @@ export function disablePlugin(name: string): boolean {
 
 export async function removePlugin(name: string): Promise<{ ok: boolean; reason?: string }> {
   disablePlugin(name);
+  await processStopped(name);
   const removed = await removePluginFiles(name).catch((error: unknown) => ({ ok: false as const, reason: String(error) }));
   if (!removed.ok) return removed;
   updateRecord(name, () => null);

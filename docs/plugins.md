@@ -177,7 +177,8 @@ plugin folder's identity on disk (device and inode, after links) in `plugins.jso
 - `ardia plugins enable NAME` opens the same sheet in Ardia; it never turns a plugin on by itself.
 - Turning off: the helper stops, its page tabs say it's off, commands, rows, hooks and tools go, and settings defaults
   go back.
-- Remove (Settings, or `ardia plugins remove`) turns it off, moves the folder to the Trash and deletes its
+- Remove (Settings, or `ardia plugins remove`) turns it off, waits for its helper (and any run still stopping) to exit,
+  then moves the folder to the Trash and deletes its
   `PluginData` folder and its page's website data. An instance on a scratch `ARDIA_DATA_DIR` deletes the folder
   instead, so tests never fill the Trash.
 
