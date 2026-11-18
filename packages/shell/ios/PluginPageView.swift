@@ -57,16 +57,6 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   static let offlinePolicy =
     "default-src 'self' ardia-plugin: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ardia-plugin:; form-action 'self'; worker-src 'none'"
 
-  static func holdOffline(_ configuration: WKWebViewConfiguration) -> Bool {
-    let peers = NSSelectorFromString("_setPeerConnectionEnabled:")
-    let hosts = NSSelectorFromString("_setAllowedNetworkHosts:")
-    guard configuration.preferences.responds(to: peers), configuration.responds(to: hosts) else { return false }
-    typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
-    unsafeBitCast(configuration.preferences.method(for: peers), to: Setter.self)(configuration.preferences, peers, false)
-    configuration.perform(hosts, with: NSSet())
-    return true
-  }
-
   private var web: WKWebView?
   private var allowedOrigin: (scheme: String, host: String, port: Int?)?
 
@@ -125,12 +115,16 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
       PluginSchemeHandler(plugin: plugin, folderId: folderId, approved: approved, policy: network ? nil : Self.offlinePolicy), forURLScheme: PluginSchemeHandler.scheme)
     configuration.userContentController.addUserScript(pageScript())
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
-    if !network && !Self.holdOffline(configuration) {
+    if !network && !PluginPageOffline.hold(preferences: configuration.preferences, configuration: configuration) {
       NSLog("[plugins] %@'s page isn't shown: this macOS can't hold a page without network offline", plugin)
       return
     }
     configuration.mediaTypesRequiringUserActionForPlayback = .all
     let view = WKWebView(frame: bounds, configuration: configuration)
+    if !network && !PluginPageOffline.isHeld(preferences: view.configuration.preferences, configuration: view.configuration) {
+      NSLog("[plugins] %@'s page isn't shown: its web view didn't keep the offline settings", plugin)
+      return
+    }
     attachBridge(to: view)
     view.navigationDelegate = self
     view.uiDelegate = self

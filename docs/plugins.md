@@ -359,8 +359,9 @@ whichever profile the tab's window shows:
   leaves. Each of those, `<link rel=preconnect>` and `dns-prefetch` included, was tried from a test page against
   listeners on this Mac's network address, and none reached them (see the proof in the pull request). A file page
   can't send its own response headers, so a `Link` preconnect header can't arise. The network-host and WebRTC switches
-  are WebKit settings that aren't public API; on a macOS where either is missing, a page without `network` isn't shown
-  at all rather than shown with the network open. With `network`, a page is a web page like any
+  are WebKit settings that aren't public API. Ardia reads both back after setting them, on the configuration and again
+  on the web view's own copy of it; on a macOS where either is missing or doesn't take, a page without `network` isn't
+  shown at all rather than shown with the network open. With `network`, a page is a web page like any
   other.
 - **Stays on its origin.** Its own files may navigate among themselves. Every other navigation is cancelled: a
   link, a `window.open`, a pop-up, a form post or a download never leaves the page, and a plugin page never opens a
@@ -417,7 +418,7 @@ The control socket's protocol 4 adds `plugins`, `plugins.enable` (`{"waiting": t
   (`socketMethods.ts`).
 - `platform/plugins.ts` binds `ArdiaPlugins` (`packages/shell/ios/PluginsModule.swift`, `PluginFolder.swift`,
   `PluginProcess.swift`, `PluginCore/` (`PluginSandbox`, `PluginFiles`, `PluginProcessTree`, `PluginRuns`, `PluginLifecycle`,
-  `PluginPageMessages`, `PluginPageOutbox`; tested by `packages/shell/plugin-tests`, run by `swift test` in `packages/shell`), `PluginPageView.swift`, `PluginSchemeHandler.swift`).
+  `PluginPageMessages`, `PluginPageOutbox`, `PluginPageOffline`; tested by `packages/shell/plugin-tests`, run by `swift test` in `packages/shell`), `PluginPageView.swift`, `PluginSchemeHandler.swift`).
 - UI: `components/settings/panes/Plugins.tsx`, `components/plugins/PluginPage.tsx` (rendered by `components/pages/InternalPage.tsx`).
 - The example plugin used by the tests: `tests/fixtures/plugins/example/`.
 
