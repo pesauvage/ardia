@@ -620,7 +620,7 @@ test("a page opens a tab only by asking its helper, which needs the commands per
 test("open takes only http and https URLs, at most ten, refusing everything else before anything opens", async () => {
   const run = await enabled();
   S().createWindow({ url: "https://a.example/" });
-  const bad = ["file:///etc/passwd", "/abs/path", "ardia:settings", "ardia://settings", "chrome://history", "about:blank", "javascript:alert(1)", "ardia-plugin://example/page/index.html", "data:text/html,hi", "https://user:pass@b.example/", "https://user@b.example/", " https://b.example/", "https://b.example/\u0000", "https://b.example/\n", "HTTPS:b.example", "https:\\\\b.example", "https://", "ht\ttps://b.example/", "https://b.example/ x", 7];
+  const bad = ["file:///etc/passwd", "/abs/path", "ardia:settings", "ardia://settings", "chrome://history", "about:blank", "javascript:alert(1)", "ardia-plugin://example/page/index.html", "data:text/html,hi", "https://user:pass@b.example/", "https://user@b.example/", " https://b.example/", "https://b.example/\u0000", "https://b.example/\n", "HTTPS:b.example", "https:\\\\b.example", "https://", "ht\ttps://b.example/", "https://b.example/ x", 7, "https://b.example:99999/", "https://b.example:0/", "https://b.example:65536/", "https://b\u00fccher.example/", "https://b.example/\u00a0", "https://b.example/\u2028", "https://b.example/\ud800", "https://[::1/", "https://[::ffff:zz]/", "https://exa%6Dple.com/", "https://b.example\\x/", "https://b.example/\u0085", "https://1.2.3/", "https:///b.example/", `https://b.example/${"a".repeat(2048)}`];
   for (const url of bad) {
     const tabs = Object.keys(S().tabs).length;
     const reply = await ask("open", { urls: [url] }, run);
@@ -630,6 +630,39 @@ test("open takes only http and https URLs, at most ten, refusing everything else
   assert.equal((await ask("open", { urls: Array.from({ length: 11 }, (_, i) => `https://b.example/${i}`) }, run)).error?.code, "bad_request", "at most ten a call");
   const fine = await ask("open", { urls: ["HTTPS://B.example/Mixed?q=1#f", "http://c.example/"] }, run);
   assert.equal(fine.result?.ok, true, JSON.stringify(fine));
+  lifecycle.disablePlugin("example");
+});
+
+test("open parses the whole address and opens the normalised one, the same address a WHATWG parser reads", async () => {
+  const run = await enabled();
+  S().createWindow({ url: "https://a.example/" });
+  const good = {
+    "HTTPS://B.example:443/Mixed?q=1#f": "https://b.example/Mixed?q=1#f",
+    "https://b.example/caf\u00e9": "https://b.example/caf%C3%A9",
+    "https://b.example/?q=caf\u00e9#\u00e9": "https://b.example/?q=caf%C3%A9#%C3%A9",
+    "https://[::1]:8443/x": "https://[::1]:8443/x",
+    "https://[0:0:0:0:0:0:0:1]/": "https://[::1]/",
+    "https://[2001:DB8::A]/": "https://[2001:db8::a]/",
+    "https://b.example./": "https://b.example./",
+    "https://b.example:99/": "https://b.example:99/",
+    "https://b.example/%2e%2e/x%zz%00?%ff": "https://b.example/%2e%2e/x%zz%00?%ff",
+    "https://xn--bcher-kva.example/": "https://xn--bcher-kva.example/",
+    "https://b.example": "https://b.example/",
+  };
+  for (const [raw, expected] of Object.entries(good)) {
+    const reply = await ask("open", { urls: [raw] }, run);
+    assert.equal(reply.result?.ok, true, `${JSON.stringify(raw)}: ${JSON.stringify(reply)}`);
+    const opened = S().tabs[reply.result.tabs[0]];
+    assert.equal(opened.url, expected, JSON.stringify(raw));
+    assert.equal(new URL(expected).href, new URL(raw).href, `${JSON.stringify(raw)} means the same address after normalising`);
+  }
+  const port = await ask("open", { urls: ["https://b.example/", "https://b.example:99999/"] }, run);
+  assert.equal(port.error?.code, "bad_request");
+  assert.match(port.error.message, /^urls\[1\] .*port/);
+  assert.match((await ask("open", { urls: ["https://b\u00fccher.example/"] }, run)).error.message, /punycode/);
+  assert.match((await ask("open", { urls: ["https://b.example/a b"] }, run)).error.message, /space/);
+  assert.match((await ask("open", { urls: ["https://b.example\\x/"] }, run)).error.message, /backslash/);
+  assert.match((await ask("open", { urls: ["https://b.example/\u0007"] }, run)).error.message, /control character/);
   lifecycle.disablePlugin("example");
 });
 

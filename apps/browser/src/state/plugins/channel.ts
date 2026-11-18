@@ -1,7 +1,7 @@
 import { onPluginExit, onPluginLine, replyToPlugin, sendToPlugin, type PluginLine } from "../../platform/plugins";
 import { systemInfo } from "../../platform/app";
 import { errorText } from "../../lib/errors";
-import { minimizedUrl } from "../../lib/urlParts";
+import { canonicalIpv6, formatUrl, minimizedUrl, urlParts } from "../../lib/urlParts";
 import type { PluginManifest } from "../../lib/pluginManifest";
 import { useBrowser } from "../browser/store";
 import { failure, parseRequest, parseSubscription, type RequestId, type Subscription } from "../automation/automationMethods";
@@ -81,17 +81,52 @@ async function toolsCall(name: string, m: PluginManifest, params: Record<string,
 }
 
 export const MAX_OPEN_URLS = 10;
-const WEB_URL = /^https?:\/\/(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*)(:\d{1,5})?(?:[/?#][\x21-\x7e]*)?$/i;
+export const MAX_OPEN_URL_LENGTH = 2048;
 
-export const isPluginWebUrl = (url: unknown): url is string => typeof url === "string" && url.length <= 2048 && WEB_URL.test(url) && !url.includes("\\");
+const AUTHORITY = /^([A-Za-z][A-Za-z\d+.-]*:\/\/)([^/?#]*)(.*)$/s;
+const NON_ASCII = /[^\x00-\x7f]+/gu;
+
+export type PluginWebUrl = { url: string } | { problem: string };
+
+function withCanonicalHost(raw: string, authority: string): string | null {
+  if (!authority.startsWith("[")) return raw;
+  const close = authority.indexOf("]");
+  const canonical = close < 0 ? null : canonicalIpv6(authority.slice(1, close).toLowerCase());
+  if (!canonical) return null;
+  const found = AUTHORITY.exec(raw)!;
+  return `${found[1]}[${canonical}]${authority.slice(close + 1)}${found[3]}`;
+}
+
+export function pluginWebUrl(raw: unknown): PluginWebUrl {
+  if (typeof raw !== "string") return { problem: "isn't text" };
+  if (raw.length > MAX_OPEN_URL_LENGTH) return { problem: `is over ${MAX_OPEN_URL_LENGTH} characters` };
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(raw)) return { problem: "has a control character" };
+  if (/\s/u.test(raw)) return { problem: "has a space; percent-encode it as %20" };
+  if (raw.includes("\\")) return { problem: "has a backslash" };
+  const found = AUTHORITY.exec(raw);
+  if (!found || !/^https?:\/\/$/i.test(found[1]!)) return { problem: "isn't an http or https address with a host" };
+  if (/[^\x00-\x7f]/.test(found[2]!)) return { problem: "has a host that isn't ASCII; send an international name as punycode (xn--)" };
+  if (found[2]!.includes("@")) return { problem: "has credentials" };
+  const plain = withCanonicalHost(raw, found[2]!);
+  const parts = plain === null ? null : urlParts(plain);
+  if (!parts || !parts.authority || !parts.host) return { problem: "isn't a valid address (check the host and that the port is 1 to 65535)" };
+  try {
+    return { url: formatUrl(parts).replace(NON_ASCII, (run) => encodeURIComponent(run)) };
+  } catch {
+    return { problem: "has text that isn't valid Unicode" };
+  }
+}
 
 async function openTabs(c: Connection, m: PluginManifest, params: Record<string, unknown>): Promise<Body> {
   if (!has(m, "commands")) return failure("refused", "open needs the commands permission.");
   const { urls, activate } = params;
-  if (!Array.isArray(urls) || urls.length < 1 || urls.length > MAX_OPEN_URLS || !urls.every(isPluginWebUrl))
-    return failure("bad_request", `open takes urls: 1 to ${MAX_OPEN_URLS} http or https addresses, with no credentials, spaces or control characters.`);
+  if (!Array.isArray(urls) || urls.length < 1 || urls.length > MAX_OPEN_URLS) return failure("bad_request", `open takes urls: a list of 1 to ${MAX_OPEN_URLS} http or https addresses.`);
+  const checked = urls.map(pluginWebUrl);
+  const bad = checked.findIndex((u) => "problem" in u);
+  if (bad >= 0) return failure("bad_request", `urls[${bad}] ${(checked[bad] as { problem: string }).problem}.`);
+  const normalised = checked.map((u) => (u as { url: string }).url);
   const current = () => acceptsRun(c.name, c.run) && !!activeManifest(currentPlugins(), c.name)?.permissions.includes("commands");
-  const body = await applyMethod({ ops: [{ op: "open", urls, ...(activate === true ? { activate: true } : {}) }] }, current);
+  const body = await applyMethod({ ops: [{ op: "open", urls: normalised, ...(activate === true ? { activate: true } : {}) }] }, current);
   const applied = "result" in body ? (body.result as { ok?: boolean; results?: { tabs?: string[] }[] }) : null;
   if (!applied?.ok) return failure(current() ? "failed" : "refused", current() ? "The tabs couldn't open." : "This run of the helper has ended or lost commands, so nothing opened.");
   return { result: { ok: true, tabs: applied.results?.[0]?.tabs ?? [] } };
