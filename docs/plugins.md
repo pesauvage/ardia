@@ -348,11 +348,14 @@ whichever profile the tab's window shows:
   are refused, and its JavaScript dialogs are ignored.
 - **Its network follows the plugin's.** Without `network`, the page reaches only its own files: Ardia sends a Content
   Security Policy in every response header (scripts, images, `fetch`, WebSockets, `EventSource`, beacons, preloads and
-  form posts go only to its own origin; no workers), turns DNS prefetching off, and turns WebRTC off in the page's
-  WebKit settings, so `RTCPeerConnection` doesn't exist and no ICE packet leaves. Each of those was tried from a test
-  page against a listener on this Mac's network address, and none reached it (see the proof in the pull request).
-  WebRTC is switched off through a WebKit preference that isn't public API; on a macOS where it's missing, a page
-  without `network` isn't shown at all rather than shown with WebRTC on. With `network`, a page is a web page like any
+  form posts go only to its own origin; no workers), turns DNS prefetching off, gives the page's WebKit configuration
+  no network hosts at all (so speculative preconnects, which don't consult the policy, open nothing; its own files
+  come through Ardia, not the network), and turns WebRTC off, so `RTCPeerConnection` doesn't exist and no ICE packet
+  leaves. Each of those, `<link rel=preconnect>` and `dns-prefetch` included, was tried from a test page against
+  listeners on this Mac's network address, and none reached them (see the proof in the pull request). A file page
+  can't send its own response headers, so a `Link` preconnect header can't arise. The network-host and WebRTC switches
+  are WebKit settings that aren't public API; on a macOS where either is missing, a page without `network` isn't shown
+  at all rather than shown with the network open. With `network`, a page is a web page like any
   other.
 - **Stays on its origin.** Its own files may navigate among themselves. Every other navigation is cancelled: a
   link, a `window.open`, a pop-up, a form post or a download never leaves the page, and a plugin page never opens a
