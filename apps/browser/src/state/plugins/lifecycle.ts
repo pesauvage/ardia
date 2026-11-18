@@ -4,6 +4,8 @@ import { systemInfo } from "../../platform/app";
 import { onConfigChange } from "../../platform/configFolder";
 import { useBrowser } from "../browser/store";
 import { notePlugin } from "../telemetry/pluginCounts";
+import { consentNow, consentToken, type ConsentToken } from "../telemetry/choice";
+import { warnFor } from "../telemetry/consoleConsent";
 import { listingOf } from "./appChecks";
 import { applySettingsPatch, planDisable, planEnable, spliceApplied } from "./defaults";
 import { writePluginRecords } from "./savedState";
@@ -30,37 +32,37 @@ export function listingsOf(entries: PluginFolderEntry[]): PluginListing[] {
     .map((e) => listingOf(e.name, e.status === "ok" ? (e.text ?? "") : null, e.status === "ok" ? null : READ_PROBLEMS[e.status], settings, version, e.folderId ?? ""));
 }
 
-function saveRecords(records: Record<string, PluginRecord>): boolean {
-  if (!writePluginRecords(records)) return false;
+function saveRecords(records: Record<string, PluginRecord>, consent: ConsentToken | null): boolean {
+  if (!writePluginRecords(records, consent)) return false;
   usePlugins.setState({ records });
   return true;
 }
 
-function updateRecord(name: string, change: (r: PluginRecord) => PluginRecord | null): boolean {
+function updateRecord(name: string, change: (r: PluginRecord) => PluginRecord | null, consent: ConsentToken | null): boolean {
   const records = { ...currentPlugins().records };
   const next = change(recordOf(currentPlugins(), name));
   if (next) records[name] = next;
   else delete records[name];
-  return saveRecords(records);
+  return saveRecords(records, consent);
 }
 
-export function reconcilePlugins() {
+export function reconcilePlugins(consent: ConsentToken | null) {
   const s = currentPlugins();
   const active = new Set<string>();
   for (const name of s.order) {
     const manifest = activeManifest(s, name);
     if (!manifest) continue;
     active.add(name);
-    if (manifest.process) superviseProcess(name, s.listings[name]!.hash!, manifest, s.listings[name]!.folderId);
-    else stopProcess(name);
+    if (manifest.process) superviseProcess(name, s.listings[name]!.hash!, manifest, s.listings[name]!.folderId, consent);
+    else stopProcess(name, consent);
   }
-  for (const name of supervisedNames()) if (!active.has(name)) stopProcess(name);
+  for (const name of supervisedNames()) if (!active.has(name)) stopProcess(name, consent);
 }
 
-export function applyListings(listings: PluginListing[]) {
+export function applyListings(listings: PluginListing[], consent: ConsentToken | null) {
   const byName = Object.fromEntries(listings.map((l) => [l.name, l]));
   usePlugins.setState({ listings: byName, order: listings.map((l) => l.name).sort() });
-  reconcilePlugins();
+  reconcilePlugins(consent);
 }
 
 let scanning: Promise<void> | null = null;
@@ -71,14 +73,15 @@ export function rescanPlugins(): Promise<void> {
     again = true;
     return scanning;
   }
+  const consent = consentToken();
   scanning = (async () => {
     do {
       again = false;
       const entries = await listPluginFolders().catch((error: unknown) => {
-        console.warn("[plugins] couldn't list the plugins folder", error);
+        warnFor(consent, "[plugins] couldn't list the plugins folder", error);
         return null;
       });
-      if (entries) applyListings(listingsOf(entries));
+      if (entries) applyListings(listingsOf(entries), consent);
     } while (again);
   })().finally(() => {
     scanning = null;
@@ -101,26 +104,27 @@ export function enablePlugin(name: string, hash: string): boolean {
   const manifest = listing.manifest;
   const before = recordOf(currentPlugins(), name);
   const values = { ...defaultValues(manifest), ...before.values };
+  const consent = consentNow();
   const kept = before.enabled && before.approved === hash;
   const records = kept || !before.enabled ? currentPlugins().records : spliceApplied(currentPlugins().records, name);
   const plan = kept ? { patch: {}, applied: before.applied } : planEnable(manifest, records, name, before.applied);
-  if (!saveRecords({ ...records, [name]: { enabled: true, approved: hash, values, applied: plan.applied } })) return false;
+  if (!saveRecords({ ...records, [name]: { enabled: true, approved: hash, values, applied: plan.applied } }, consent)) return false;
   applySettingsPatch(plan.patch);
   usePlugins.setState({ consent: null });
-  notePlugin("plugin_enables");
-  reconcilePlugins();
+  notePlugin("plugin_enables", consent);
+  reconcilePlugins(consent);
   return true;
 }
 
-export function disablePlugin(name: string): boolean {
+export function disablePlugin(name: string, consent: ConsentToken | null): boolean {
   const before = recordOf(currentPlugins(), name);
   if (!before.enabled) return true;
   const patch = planDisable(currentPlugins().records, name);
   const records = spliceApplied(currentPlugins().records, name);
-  if (!saveRecords({ ...records, [name]: { ...before, enabled: false, applied: {} } })) return false;
+  if (!saveRecords({ ...records, [name]: { ...before, enabled: false, applied: {} } }, consent)) return false;
   applySettingsPatch(patch);
-  notePlugin("plugin_disables");
-  reconcilePlugins();
+  notePlugin("plugin_disables", consent);
+  reconcilePlugins(consent);
   return true;
 }
 
@@ -128,12 +132,13 @@ const removing = new Set<string>();
 
 export async function removePlugin(name: string): Promise<{ ok: boolean; reason?: string }> {
   if (removing.has(name)) return { ok: false, reason: "It is already being removed." };
-  if (!disablePlugin(name)) return { ok: false, reason: "It couldn't be turned off, because plugins.json couldn't be saved." };
+  const consent = consentToken();
+  if (!disablePlugin(name, consent)) return { ok: false, reason: "It couldn't be turned off, because plugins.json couldn't be saved." };
   removing.add(name);
   try {
     const removed = await removePluginFiles(name).catch((error: unknown) => ({ ok: false as const, reason: String(error) }));
     if (!removed.ok) return removed;
-    updateRecord(name, () => null);
+    updateRecord(name, () => null, consent);
     await rescanPlugins();
     return { ok: true };
   } finally {
@@ -144,7 +149,7 @@ export async function removePlugin(name: string): Promise<{ ok: boolean; reason?
 export function setPluginValue(name: string, key: string, value: string | boolean) {
   const row = currentPlugins().listings[name]?.manifest?.settings.rows.find((r) => r.key === key);
   if (!row || rowValue(row, value) !== value) return;
-  if (!updateRecord(name, (r) => ({ ...(r === NO_RECORD ? { ...NO_RECORD } : r), values: { ...r.values, [key]: value } }))) return;
+  if (!updateRecord(name, (r) => ({ ...(r === NO_RECORD ? { ...NO_RECORD } : r), values: { ...r.values, [key]: value } }), consentNow())) return;
   if (activeManifest(currentPlugins(), name)) sendValues(name);
 }
 

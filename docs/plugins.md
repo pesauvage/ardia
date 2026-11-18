@@ -420,7 +420,9 @@ The control socket's protocol 4 adds `plugins`, `plugins.enable` (`{"waiting": t
 
 ## Telemetry
 
-Counts only, never plugin names, titles, URLs, row values, tool input or output:
+Counts only, never plugin names, titles, URLs, row values, tool input or output, each tied to the consent period the
+activity began in (a tool call's outcome to the call, a helper start to the turn-on, restart or exit that asked for
+it), so a count that finishes after sharing changed stays in the local copy:
 `usage_counts.plugin_enables`, `plugin_disables`, `plugin_process_starts`, `plugin_process_crashes`,
 `plugin_commands_run`, `plugin_tool_calls`, `plugin_tool_failures`, `plugin_page_opens`, `plugin_split_opens`; the daily settings snapshot's
 `plugins_installed`, `plugins_enabled` and, among those on, how many use each contribution:

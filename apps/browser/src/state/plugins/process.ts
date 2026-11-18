@@ -1,6 +1,8 @@
 import type { PluginManifest } from "../../lib/pluginManifest";
 import { startPluginProcess, stopPluginProcess, type PluginExit } from "../../platform/plugins";
 import { notePlugin } from "../telemetry/pluginCounts";
+import { consentNow, consentToken, type ConsentToken } from "../telemetry/choice";
+import { warnFor } from "../telemetry/consoleConsent";
 import { usePlugins, type ProcessState } from "./store";
 
 export const RESTART_DELAYS_MS = [1000, 2000, 4000, 8000, 16000];
@@ -40,7 +42,7 @@ const stopped = (name: string) => {
   for (const listener of stopListeners) listener(name);
 };
 
-async function launch(name: string, entry: Supervised) {
+async function launch(name: string, entry: Supervised, consent: ConsentToken | null) {
   const token = entry.token;
   setProcess(name, { state: "starting", run: 0, since: Date.now() });
   const m = entry.manifest;
@@ -56,30 +58,31 @@ async function launch(name: string, entry: Supervised) {
   }
   if (started.ok) highestRun = Math.max(highestRun, started.run);
   if (!started.ok) return setProcess(name, { state: "failed", reason: started.reason });
-  notePlugin("plugin_process_starts");
+  notePlugin("plugin_process_starts", consent);
   setProcess(name, { state: "running", run: started.run, since: Date.now() });
 }
 
-export function superviseProcess(name: string, hash: string, manifest: PluginManifest, folderId: string) {
+export function superviseProcess(name: string, hash: string, manifest: PluginManifest, folderId: string, consent: ConsentToken | null) {
   const current = supervised.get(name);
   if (current && current.hash === hash) return;
-  if (current) stopProcess(name);
+  if (current) stopProcess(name, consent);
   const entry: Supervised = { hash, folderId, manifest, failures: [], timer: null, token: ++tokens };
   supervised.set(name, entry);
-  void launch(name, entry);
+  void launch(name, entry, consent);
 }
 
-export function stopProcess(name: string, graceMs = STOP_GRACE_MS) {
+export function stopProcess(name: string, consent: ConsentToken | null, graceMs = STOP_GRACE_MS) {
   const entry = supervised.get(name);
   if (!entry) return;
   supervised.delete(name);
   if (entry.timer) clearTimeout(entry.timer);
   setProcess(name, null);
   stopped(name);
-  void stopPluginProcess(name, 0, graceMs).catch((error: unknown) => console.warn(`[plugins] couldn't stop ${name}`, error));
+  void stopPluginProcess(name, 0, graceMs).catch((error: unknown) => warnFor(consent, `[plugins] couldn't stop ${name}`, error));
 }
 
 export function restartProcess(name: string) {
+  const consent = consentNow();
   const entry = supervised.get(name);
   if (!entry) return;
   if (entry.timer) clearTimeout(entry.timer);
@@ -88,18 +91,19 @@ export function restartProcess(name: string) {
   const token = (entry.token = ++tokens);
   stopped(name);
   void stopPluginProcess(name, 0, STOP_GRACE_MS).then(() => {
-    if (supervised.get(name) === entry && entry.token === token) void launch(name, entry);
+    if (supervised.get(name) === entry && entry.token === token) void launch(name, entry, consent);
   });
 }
 
 export function processExited(exit: PluginExit, now = Date.now()) {
+  const consent = consentToken();
   const entry = supervised.get(exit.name);
   const state = usePlugins.getState().processes[exit.name];
   if (!entry || state?.state !== "running" || state.run !== exit.run) return;
   stopped(exit.name);
   const clean = exit.status === 0 && exit.signal === null && !exit.overMemory;
   if (clean) return setProcess(exit.name, { state: "exited" });
-  notePlugin("plugin_process_crashes");
+  notePlugin("plugin_process_crashes", consent);
   entry.failures = [...entry.failures.filter((t) => now - t < CRASH_WINDOW_MS), now];
   const reason = exit.overMemory ? "went over its memory limit" : exit.signal !== null ? `stopped by signal ${exit.signal}` : `exited with status ${exit.status}`;
   if (entry.failures.length >= CRASH_LIMIT) return setProcess(exit.name, { state: "crashed", reason });
@@ -109,12 +113,8 @@ export function processExited(exit: PluginExit, now = Date.now()) {
   if (entry.timer) clearTimeout(entry.timer);
   entry.timer = setTimeout(() => {
     entry.timer = null;
-    if (supervised.get(exit.name) === entry && entry.token === token) void launch(exit.name, entry);
+    if (supervised.get(exit.name) === entry && entry.token === token) void launch(exit.name, entry, consent);
   }, delay);
 }
 
 export const supervisedNames = () => [...supervised.keys()];
-
-export function stopAllProcesses(graceMs: number) {
-  for (const name of supervisedNames()) stopProcess(name, graceMs);
-}

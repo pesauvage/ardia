@@ -1,5 +1,6 @@
 import { callPlugin } from "../../platform/plugins";
 import { notePlugin } from "../telemetry/pluginCounts";
+import { consentToken, type ConsentToken } from "../telemetry/choice";
 import { activeManifest, currentPlugins } from "./store";
 
 export const MAX_CALLS_PER_PLUGIN = 16;
@@ -8,7 +9,7 @@ export const MAX_TOOL_JSON = 1 << 20;
 export type ToolCaller = { kind: "command" } | { kind: "cli" } | { kind: "plugin"; plugin: string };
 export type ToolOutcome = { ok: true; result: unknown } | { ok: false; code: "refused" | "failed" | "bad_request"; message: string };
 
-type Pending = { id: string; plugin: string; run: number; settle: (outcome: ToolOutcome) => void; timer: ReturnType<typeof setTimeout> };
+type Pending = { id: string; plugin: string; run: number; consent: ConsentToken | null; settle: (outcome: ToolOutcome) => void; timer: ReturnType<typeof setTimeout> };
 
 const pending = new Map<string, Pending>();
 let seq = 0;
@@ -25,7 +26,7 @@ function finish(id: string, outcome: ToolOutcome) {
   if (!call) return false;
   pending.delete(id);
   clearTimeout(call.timer);
-  if (!outcome.ok) notePlugin("plugin_tool_failures");
+  if (!outcome.ok) notePlugin("plugin_tool_failures", call.consent);
   call.settle(outcome);
   return true;
 }
@@ -47,12 +48,13 @@ export function callTool(plugin: string, tool: string, input: unknown, caller: T
   }
   if (line.length > MAX_TOOL_JSON) return Promise.resolve(failed("bad_request", "The tool's input is over 1 MB."));
   if ([...pending.values()].filter((p) => p.plugin === plugin).length >= MAX_CALLS_PER_PLUGIN) return Promise.resolve(failed("failed", `${plugin} has too many calls waiting.`));
-  notePlugin("plugin_tool_calls");
+  const consent = consentToken();
+  notePlugin("plugin_tool_calls", consent);
   return new Promise<ToolOutcome>((settle) => {
     const timer = setTimeout(() => {
       if (finish(id, failed("failed", `${plugin} didn't answer ${tool} in ${spec.timeout} s.`))) callPlugin(plugin, run, JSON.stringify({ call: id, cancel: true }));
     }, spec.timeout * 1000);
-    pending.set(id, { id, plugin, run, settle, timer });
+    pending.set(id, { id, plugin, run, consent, settle, timer });
     try {
       callPlugin(plugin, run, line);
     } catch (error) {

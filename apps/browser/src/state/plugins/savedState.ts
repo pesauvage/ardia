@@ -3,6 +3,8 @@ import { isFields, type Fields } from "../../lib/decode";
 import { parseSaved, versionedJson } from "../../lib/savedDocument";
 import { NAME_PATTERN } from "../../lib/pluginManifest";
 import type { PluginRecord } from "./store";
+import { warnFor } from "../telemetry/consoleConsent";
+import type { ConsentToken } from "../telemetry/choice";
 
 export const PLUGINS_DOC = "plugins.json";
 const VERSION = 1;
@@ -44,12 +46,12 @@ export function readPluginRecords(): Record<string, PluginRecord> {
   }
 }
 
-export function writePluginRecords(records: Record<string, PluginRecord>): boolean {
+export function writePluginRecords(records: Record<string, PluginRecord>, consent: ConsentToken | null): boolean {
   try {
     writeDocument(PLUGINS_DOC, pluginRecordsJson(records));
     return true;
   } catch (error) {
-    console.warn("[plugins] couldn't save plugins.json", error);
+    warnFor(consent, "[plugins] couldn't save plugins.json", error);
     return false;
   }
 }

@@ -16,6 +16,8 @@ const { pluginSocketMethod } = await import("./socketMethods.ts");
 const { takePluginCounts } = await import("../telemetry/pluginCounts.ts");
 const { consentLines } = await import("./consent.ts");
 const { useToasts } = await import("../app/toasts.ts");
+const { setConsentPeriod } = await import("../telemetry/consentPeriod.ts");
+setConsentPeriod(true, "plugins-test");
 
 const FIXTURE = readFileSync(new URL("../../../../../tests/fixtures/plugins/example/plugin.json", import.meta.url), "utf8");
 const S = () => useBrowser.getState();
@@ -649,4 +651,22 @@ test("an open queued when its run ends never runs", async () => {
   await settle();
   assert.equal(Object.keys(S().tabs).length, before, "the run that asked has ended, so nothing opens");
   lifecycle.disablePlugin("example");
+});
+
+test("a tool call that fails after sharing changed isn't counted in the new period", async () => {
+  const run = await enabled();
+  takePluginCounts();
+  const outcome = callTool("example", "seen", {}, { kind: "cli" });
+  await settle();
+  setConsentPeriod(true, "plugins-test-next");
+  try {
+    lifecycle.disablePlugin("example");
+    assert.equal((await outcome).ok, false);
+    const counts = takePluginCounts();
+    assert.equal(counts.plugin_tool_calls, 1, "the call was counted when it began");
+    assert.equal(counts.plugin_tool_failures, 0, "its failure carries the old period's token, so it stays local");
+  } finally {
+    setConsentPeriod(true, "plugins-test");
+  }
+  void run;
 });

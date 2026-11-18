@@ -1,3 +1,4 @@
+import { consentNow } from "../telemetry/choice";
 import { contributionsOf } from "../../lib/pluginManifest";
 import { failure } from "../automation/automationMethods";
 import type { Body } from "../automation/controlSocket";
@@ -42,7 +43,7 @@ export function pluginSocketMethod(method: string, params: Record<string, unknow
       return { result: { waiting: true } };
     case "plugins.disable":
       if (!known) return failure("bad_request", `There's no plugin ${String(name)}.`);
-      return disablePlugin(name) ? { result: { ok: true } } : failure("failed", "Couldn't save plugins.json.");
+      return disablePlugin(name, consentNow()) ? { result: { ok: true } } : failure("failed", "Couldn't save plugins.json.");
     case "plugins.remove":
       if (!known) return failure("bad_request", `There's no plugin ${String(name)}.`);
       return removePlugin(name).then((r) => (r.ok ? { result: { ok: true } } : failure("failed", r.reason ?? "Couldn't remove it.")));
