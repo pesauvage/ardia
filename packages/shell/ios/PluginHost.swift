@@ -62,10 +62,40 @@ final class PluginHost {
     switch result {
     case .success(let process):
       runs.installed(process)
-      done(["ok": true, "run": process.run, "pid": Int(process.pid), "pageToken": PluginPageProof.randomHex()])
+      done(["ok": true, "run": process.run, "pid": Int(process.pid), "pageSecret": PluginPageRelay.randomSecret()])
     case .failure(let failure):
       NSLog("[plugins] %@ didn't start: %@", spec.name, failure.reason)
       done(["ok": false, "reason": failure.reason])
+    }
+  }
+
+  static let pageAnswerTimeout: TimeInterval = 30
+
+  private final class OpenPageRequest {
+    var id: String?
+    weak var process: PluginProcess?
+  }
+
+  func pageRequest(_ plugin: String, method: String, path: String, headers: [String: String], handlers: PluginPageRelay.Handlers) -> () -> Void {
+    let open = OpenPageRequest()
+    queue.async { [self] in
+      guard let process = runs.current[plugin], !process.exited, let connection = process.connection else { return handlers.fail("its program isn't running") }
+      guard let (id, line) = process.pageRelay.begin(method: method, path: path, headers: headers, handlers: handlers) else {
+        return handlers.fail("its program has too many page requests open")
+      }
+      open.id = id
+      open.process = process
+      connection.send(line)
+      queue.asyncAfter(deadline: .now() + Self.pageAnswerTimeout) { [weak process] in
+        guard let process, let cancel = process.pageRelay.expire(id, "its program didn't answer in 30 seconds") else { return }
+        process.connection?.send(cancel)
+      }
+    }
+    return { [weak self] in
+      self?.queue.async {
+        guard let process = open.process, let id = open.id, let cancel = process.pageRelay.cancel(id) else { return }
+        process.connection?.send(cancel)
+      }
     }
   }
 

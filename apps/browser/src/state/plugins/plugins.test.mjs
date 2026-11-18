@@ -7,7 +7,7 @@ const { startPlugins } = await import("./start.ts");
 const { usePlugins, activeManifest, needsReview } = await import("./store.ts");
 const lifecycle = await import("./lifecycle.ts");
 const { pluginBarActions, runPluginAction } = await import("./commands.ts");
-const { pageContextOf, pageViewUrl, openPluginPage } = await import("./pages.ts");
+const { pageContextOf, pageViewUrl, shownContext, openPluginPage } = await import("./pages.ts");
 const { barActions } = await import("../omnibox/barActions.ts");
 const { isInternalTab } = await import("../pages/urls.ts");
 const { processExited, restartProcess, CRASH_LIMIT } = await import("./process.ts");
@@ -211,7 +211,7 @@ test("a changed manifest stops everything until reviewed; disabling withdraws co
   await enabled();
   const w = S().createWindow({ url: "https://a.example/" });
   const page = openPluginPage(w, "example");
-  assert.equal(pageViewUrl(P(), "example", null), "ardia-plugin://example/page/index.html");
+  assert.equal(pageViewUrl(P(), "example"), "ardia-plugin://example/page/index.html");
   const changed = JSON.parse(FIXTURE);
   changed.permissions.push("network");
   await install(JSON.stringify(changed));
@@ -219,7 +219,7 @@ test("a changed manifest stops everything until reviewed; disabling withdraws co
   assert.equal(activeManifest(P(), "example"), null);
   assert.equal(P().processes.example, undefined);
   assert.ok(host.stops.some((s) => s.name === "example"));
-  assert.equal(pageViewUrl(P(), "example", null), null, "a changed plugin's page shows that it's off");
+  assert.equal(pageViewUrl(P(), "example"), null, "a changed plugin's page shows that it's off");
   assert.ok(isInternalTab(S().tabs[page]), "its tab stays an internal page, never a Chrome page");
   assert.deepEqual(pluginBarActions(P()), []);
   assert.ok(lifecycle.requestPluginConsent("example"));
@@ -286,8 +286,8 @@ test("the page is a tab at ardia://<name>; a command opens it beside the current
   assert.ok(split && JSON.stringify(split).includes(page), "the page and the tab share a split");
   const context = pageContextOf(page);
   assert.deepEqual(context, { tabId: reading, url: "https://a.example/read?id=7#top", title: "Reading" });
-  assert.match(decodeURIComponent(pageViewUrl(P(), "example", context)), /"url":"https:\/\/a\.example\/read"/, "without fullUrls the page gets the URL without its query");
-  assert.match(pageViewUrl(P(), "example", context), /^ardia-plugin:\/\/example\/page\/index\.html\?ardiaContext=/);
+  assert.equal(shownContext(P(), "example", context).url, "https://a.example/read", "without fullUrls the page gets the URL without its query");
+  assert.equal(pageViewUrl(P(), "example"), "ardia-plugin://example/page/index.html", "the context never rides in the page's URL");
   const counts = takePluginCounts();
   assert.equal(counts.plugin_split_opens, 1);
   assert.equal(counts.plugin_page_opens, 1);
@@ -335,26 +335,11 @@ test("pages take a path: each path is its own tab, and a helper opens them with 
   assert.ok(isInternalTab(S().tabs[chat]));
   assert.equal(openPluginPage(w, "example", { path: "/history" }), history, "the same path goes back to its tab");
   assert.equal(openPluginPage(w, "example", { path: "/../x" }), null);
-  assert.match(pageViewUrl(P(), "example", null, "/chats/42?draft=1"), /\?ardiaPath=%2Fchats%2F42%3Fdraft%3D1$/);
+  assert.match(pageViewUrl(P(), "example", "/chats/42?draft=1"), /\?ardiaPath=%2Fchats%2F42%3Fdraft%3D1$/);
   const opened = await ask("page.open", { path: "/chats/7", split: true, side: "left" }, run);
   assert.ok(opened.result.tabId);
   assert.equal(S().tabs[opened.result.tabId].url, "ardia://example/chats/7");
   assert.equal((await ask("page.open", { path: "nope path" }, run)).error.code, "bad_request");
-  lifecycle.disablePlugin("example");
-});
-
-test("a served page keeps its server's fragment when it gets a path or a context", async () => {
-  const served = JSON.parse(FIXTURE);
-  served.page = { title: "Served", served: true };
-  served.permissions.push("network");
-  await install(JSON.stringify(served));
-  assert.ok(lifecycle.requestPluginConsent("example"));
-  assert.ok(lifecycle.enablePlugin("example", P().consent.hash));
-  await settle();
-  usePlugins.setState({ servedUrls: { example: "http://127.0.0.1:4321/app/?v=1#k=secret" } });
-  assert.equal(pageViewUrl(P(), "example", null, "/chats/9"), "http://127.0.0.1:4321/chats/9#k=secret");
-  const context = { tabId: "t", url: "https://a.example/", title: "A" };
-  assert.equal(pageViewUrl(P(), "example", context, ""), `http://127.0.0.1:4321/app/?v=1&ardiaContext=${encodeURIComponent(JSON.stringify(context))}#k=secret`);
   lifecycle.disablePlugin("example");
 });
 
@@ -437,7 +422,7 @@ test("a page's context belongs to the plugin, the address and the approval it wa
   S().updateTab(page, { url: "ardia://example" });
   assert.equal(pageContextOf(page), null, "and coming back doesn't bring it back");
   const anyContext = { tabId: reading, url: "https://a.example/read?token=1", title: "Reading" };
-  assert.doesNotMatch(decodeURIComponent(pageViewUrl(P(), "example", anyContext)), /token=1/, "the URL is built with the plugin's own permissions");
+  assert.doesNotMatch(shownContext(P(), "example", anyContext).url, /token=1/, "the context is cut to the plugin's own permissions");
   lifecycle.disablePlugin("example");
 });
 
@@ -502,20 +487,23 @@ test("two quick restarts start the helper once", async () => {
   lifecycle.disablePlugin("example");
 });
 
-test("a served page's helper gets this run's page token, which the page view makes its server prove", async () => {
+test("a served page loads through Ardia from its helper's channel, never from a port, and its helper gets this run's page secret", async () => {
   const served = JSON.parse(FIXTURE);
   served.page = { title: "Served", served: true };
   served.permissions.push("network");
   await install(JSON.stringify(served));
   assert.ok(lifecycle.requestPluginConsent("example") && lifecycle.enablePlugin("example", P().consent.hash));
   await settle();
-  const { run, pageToken } = P().processes.example;
-  assert.match(pageToken, /^[0-9a-f]{64}$/);
-  assert.equal((await ask("hello", {}, run)).result.pageToken, pageToken);
-  assert.deepEqual((await ask("page.serve", { url: "http://127.0.0.1:4321/" }, run)).result, { ok: true, pageToken });
+  const { run, pageSecret } = P().processes.example;
+  assert.match(pageSecret, /^[0-9a-f]{64}$/);
+  assert.equal((await ask("hello", {}, run)).result.pageSecret, pageSecret);
+  assert.equal(pageViewUrl(P(), "example", "/chats/7"), null, "nothing loads before the helper is ready");
+  assert.equal((await ask("page.serve", { url: "http://127.0.0.1:4321/" }, run)).error.code, "bad_request", "a port is never trusted with the page");
+  assert.deepEqual((await ask("page.serve", {}, run)).result, { ok: true });
+  assert.equal(pageViewUrl(P(), "example", "/chats/7?x=1"), "ardia-plugin://example/chats/7?x=1");
   lifecycle.disablePlugin("example");
+  assert.equal(pageViewUrl(P(), "example", "/chats/7"), null);
 });
-
 test("when plugins.json can't be saved, turning a plugin on or off changes no settings", async () => {
   S().hydrate({});
   startPlugins();

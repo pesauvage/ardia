@@ -1,6 +1,6 @@
 import { useShallow } from "zustand/react/shallow";
-import { activeManifest, needsReview, recordOf, usePlugins, type PluginsStore } from "./store";
-import { pageContextOf, pageViewUrl, usePluginPages } from "./pages";
+import { activeManifest, currentPlugins, needsReview, recordOf, usePlugins, type PluginsStore } from "./store";
+import { pageContextOf, pageViewUrl, shownContext, usePluginPages } from "./pages";
 import { useBrowser } from "../browser/store";
 import { valuesOf } from "./values";
 
@@ -12,18 +12,21 @@ export const usePluginNeedsReview = (name: string) => usePlugins((s) => needsRev
 export const usePluginProcess = (name: string) => usePlugins((s) => s.processes[name]);
 export const usePluginConsent = () => usePlugins((s) => s.consent);
 export const usePluginValues = (name: string) => usePlugins(useShallow((s: PluginsStore) => valuesOf(s, name)));
-export function usePluginPageContext(tabId: string) {
+export function usePluginPageContext(tabId: string, name: string): string {
   usePluginPages((s) => s.contexts[tabId]);
   useBrowser((s) => s.tabs[tabId]?.url);
   usePlugins((s) => s.records);
-  return pageContextOf(tabId);
+  usePlugins((s) => s.listings[name]);
+  const shown = shownContext(currentPlugins(), name, pageContextOf(tabId));
+  return shown ? JSON.stringify(shown) : "";
 }
-export const usePluginPageUrl = (name: string, context: Parameters<typeof pageViewUrl>[2], path: string) => usePlugins((s) => pageViewUrl(s, name, context, path));
+export const usePluginPageUrl = (name: string, path: string) => usePlugins((s) => pageViewUrl(s, name, path));
 export const usePluginFolderId = (name: string) => usePlugins((s) => s.listings[name]?.folderId ?? "");
-export const usePluginPageToken = (name: string) =>
+export const usePluginPageSecret = (name: string) =>
   usePlugins((s) => {
     const state = s.processes[name];
-    return state?.state === "running" ? (state.pageToken ?? "") : "";
+    return state?.state === "running" ? (state.pageSecret ?? "") : "";
   });
+export const usePluginPageServed = (name: string) => usePlugins((s) => { const source = s.listings[name]?.manifest?.page?.source; return !!source && "served" in source; });
 export const usePluginNetwork = (name: string) => usePlugins((s) => !!activeManifest(s, name)?.permissions.includes("network"));
 export const usePluginPageSpec = (name: string) => usePlugins((s) => s.listings[name]?.manifest?.page ?? null);

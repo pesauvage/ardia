@@ -113,18 +113,17 @@ names the tab and `icon` its command bar entry. The tab's content is one of:
   Only regular files inside the approved plugin folder are served: each is opened one path component at a time from
   that opened folder, and a link anywhere in its path is refused. At most 10 MB each, with their type from the
   extension; anything else is a 404.
-- `"served": true`: the helper serves it and tells Ardia where with `page.serve` (below). The URL must be
-  `http://127.0.0.1:<port>/…`, `http://localhost:<port>/…` or `http://[::1]:<port>/…`. Until it arrives the tab says the
-  plugin is starting. A served page needs the `network` permission: its server's responses (a redirect, a `Link`
-  preload header) start requests before any policy in the page can apply, so Ardia can't hold it to this Mac.
-  A loopback address doesn't say who is listening on it, so the server must prove it is this run of the helper
-  ([Served pages](#served-pages)).
+- `"served": true`: the helper serves it, over its channel, never from a port: the page is
+  `ardia-plugin://<name>/<path>`, and Ardia asks the helper for every document, script, style and image it loads
+  ([Served pages](#served-pages)). Until the helper says it is ready (`page.serve`) the tab says the plugin is
+  starting. A served page needs the `network` permission for now.
 
 A page tab can have a path, `ardia://<name>/<path>?<query>` (`ardia://ai/history`, `ardia://ai/chats/42`): each path
 is its own tab, and opening one that's already open in the window goes to it. A file page gets the path and query as
-`ardiaPath`; a served page loads them on its helper's server. When a command hands the page a tab, the page's URL
-carries it as `ardiaContext`, a JSON object `{"tabId", "url", "title"}`, its URL cut to the plugin's permissions when
-the page loads. The context belongs to that page tab, that plugin and that approval: it goes when the tab leaves the
+`ardiaPath`; a served page is asked for them (`/chats/42?x=1`). When a command hands the page a tab, the page reads it
+as `window.ardia.context`, a JSON object `{"tabId", "url", "title"}` with its URL cut to the plugin's permissions, set
+before the page's own scripts run; a new one fires an `ardiacontext` event. It is never in the page's URL or in any
+request. The context belongs to that page tab, that plugin and that approval: it goes when the tab leaves the
 address it was opened at, and when the plugin is turned off, changes or is approved again. Navigation inside the page doesn't change the
 tab's address, title or back and forward yet (follow-up issue). While the plugin is off, changed or not running, the tab stays and says so, with a way to Settings; it is
 never sent to Chrome. A plugin with a page can't take the name of one of Ardia's or Chrome's own pages (`history`,
@@ -271,12 +270,14 @@ Requests from the helper (`{"id", "method", "params"}`):
 
 | Method | Needs | Result |
 | --- | --- | --- |
-| `hello` | | `{"app", "version", "protocol": 1, "plugin", "values", "pageToken"}`: `values` are the row values, `pageToken` this run's page token ([Served pages](#served-pages)) |
+| `hello` | | `{"app", "version", "protocol": 1, "plugin", "values", "pageSecret"}`: `values` are the row values, `pageSecret` this run's page secret ([Served pages](#served-pages)) |
 | `values` | | the row values |
 | `subscribe` `{"events", "idle"?}` | the events in `hooks` | `{"ok": true}`; then `{"event", "time", "data"}` lines as on the socket; `["*"]` means every event in `hooks` |
 | `windows` | `tabs` | as on the socket |
 | `run` `{"command", "arg"?, "window"?, "tab"?}` | `commands` | as on the socket |
-| `page.serve` `{"url"}` | `page.served` | `{"ok": true, "pageToken"}`; open page tabs load it once its server proves itself |
+| `page.serve` `{}` | `page.served` | `{"ok": true}`: the helper is ready to answer page requests; open page tabs load. A `url` is `bad_request` |
+| `page.respond` `{"request", "status", "headers"?, "body"?, "more"?}` | `page.served` | `{"ok": true}`: the answer to a page request ([Served pages](#served-pages)) |
+| `page.body` `{"request", "body", "more"?}` | `page.served` | `{"ok": true}`: more of that answer |
 | `page.open` `{"path"?, "split"?, "side"?, "context"?}` | a `page`; `context` needs `tabs` | `{"tabId", "windowId"}`: opens the plugin's page at that path in the last focused window, as a tab or in Split View beside the current tab |
 | `tools.call` `{"plugin", "tool", "input"?}` | every permission the other plugin has | the tool's result, or its error; the plugin must be on and running. A plugin can't reach through another plugin's tools to what it wasn't granted itself |
 | `result` `{"call", "result"? , "error"?}` | | `{"ok": true}`: the answer to a call (below) |
@@ -289,21 +290,28 @@ call past its deadline is answered with an error for the caller and `{"call": "c
 
 ### Served pages
 
-Each run of a helper gets a page token, 64 hex characters from Ardia, in `hello` and `page.serve`'s results. It
-binds the page's loopback server to that run:
+A served page's documents and everything they load from their own origin come from the helper over its channel,
+which belongs to that run of the helper and nothing else, so there is no port another process could answer on, no
+proof to make and no cookie to steal.
 
-- **The server proves itself before every load.** Before a page tab loads the served URL (and with it any context a
-  command hands the page), Ardia asks `GET <origin>/.well-known/ardia-plugin-proof?nonce=<64 hex>` with no cookies,
-  following no redirect, and the server must answer 200 with the lowercase hex HMAC-SHA256 of the nonce, keyed with
-  the page token. Anything else (another process on that port, an old run's server, a redirect) and the tab says the
-  page didn't load; nothing is sent to it.
-- **Ardia's requests carry the token.** The page's own website data store holds an HttpOnly, SameSite=Strict cookie
-  `ardia_page_token=<page token>` for the server's host, so every request the page makes carries it. Websites in
-  Chrome, other plugins' pages and other programs don't have it: the server should refuse any request without it
-  (the proof request aside).
-- What it doesn't cover: cookies don't separate ports, so the page's own requests to another loopback port carry the
-  token too; and once a page has loaded, a process that takes over the port afterwards (bind `127.0.0.1` exactly,
-  not every address, and keep the socket for the whole run) gets the page's later requests.
+- **Requests** arrive as `{"pageRequest": "p7", "method": "GET" | "HEAD", "path": "/chats/7?x=1", "headers": {…}}`.
+  `headers` carries only `accept`, `accept-language`, `range`, `if-none-match` and `if-modified-since`. Other methods
+  never reach the helper (the page gets 405).
+- **Answers:** `page.respond` with the request id, `status` (100 to 599), `headers` (only `content-type`,
+  `cache-control`, `etag`, `last-modified`, `content-language`, `content-range` and `accept-ranges` are kept; Ardia
+  adds `x-content-type-options: nosniff`), and optionally the first `body` chunk (base64, at most 512 KB decoded);
+  `"more": true` keeps it open for `page.body` chunks, which stream to the page as they come. At most 10 MB per
+  answer, 32 requests open at once, and 30 s to the first `page.respond`; past that the page gets 502 and
+  `{"pageCancel": "p7"}` is sent, as it is when the page stops loading something. Answers to a request that isn't open
+  are `bad_request`.
+- **The page's secret.** Each run gets a page secret, 64 hex characters from Ardia, in `hello`'s result, and the page
+  of that run reads the same one as `window.ardia.secret` (set before its scripts run, main frame only). It's for a
+  live connection the page opens to its helper itself (a WebSocket on loopback, with `network`), so each side can
+  prove the other knows it: the helper sends a fresh nonce, the page answers with HMAC-SHA256(secret, `"page:" +
+  nonce`) and sends its own nonce, the helper answers with HMAC-SHA256(secret, `"helper:" + nonce`), and the page
+  sends nothing else until that verifies (`crypto.subtle.verify`, which compares in constant time). A listener
+  that isn't the helper never sees anything it could reuse. A new run of the helper reloads the page with the new
+  secret.
 
 ## The page
 
@@ -314,11 +322,13 @@ whichever profile the tab's window shows:
   derived from the plugin's name), apart from every profile's cookies, logins and storage, the WebKit page engine's
   stores and other plugins' pages. Removing the plugin deletes it.
 - **Away from Ardia's interface.** It runs in WebKit's own processes with no script message handlers, so the page can't
-  reach the interface's JavaScript, the store or any native call. It gets no camera, microphone or location, downloads
+  reach the interface's JavaScript, the store or any native call. Ardia only puts `window.ardia` (`context`, `secret`)
+  into the page's main frame. It gets no camera, microphone or location, downloads
   are refused, and its JavaScript dialogs are ignored.
 - **Its network follows the plugin's.** Without `network`, a file page's own requests (scripts, images, `fetch`,
   WebSockets) may only reach its own origin and this Mac, and it can't start workers: Ardia sends a Content Security
-  Policy in every response header. A helper-served page always has `network` (above).
+  Policy in every response header. A helper-served page always has `network` (above); Ardia builds every response
+  header it gets, so nothing the helper sends (a `Link` preload, a redirect, a cookie) starts a request.
 - **Stays on its origin.** Its own origin may navigate freely; a link you click to any other http(s) address opens
   as a new tab in the window's profile (where your cookies apply, as for any link you open), and every other
   navigation, a pop-up or a `window.open` included, is cancelled.

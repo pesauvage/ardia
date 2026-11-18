@@ -20,6 +20,7 @@ final class PluginProcess: PluginRun {
   private var reaped = false
   private var familyTimer: DispatchSourceTimer?
   private var overMemory = false
+  let pageRelay = PluginPageRelay()
   private var family: Set<PluginProcessMember> = []
   private var log: Int32
 
@@ -160,7 +161,7 @@ final class PluginProcess: PluginRun {
     let connection = ControlConnection(
       id: run, fd: channel, queue: queue,
       onLine: { [weak self] _, line in
-        guard let self else { return }
+        guard let self, !self.answeredPageLine(line) else { return }
         onLine(self, line)
       },
       onClose: { _ in }, onWritten: { _ in })
@@ -184,6 +185,17 @@ final class PluginProcess: PluginRun {
     familyTimer = sampler
     sampler.activate()
     queue.async { [weak self] in self?.reapIfGone(onExit) }
+  }
+
+  private func answeredPageLine(_ line: String) -> Bool {
+    guard line.contains("\"page.respond\"") || line.contains("\"page.body\""), let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+      let method = object["method"] as? String, method == "page.respond" || method == "page.body"
+    else { return false }
+    let problem = pageRelay.handle(method: method, params: object["params"] as? [String: Any] ?? [:])
+    var reply: [String: Any] = problem.map { ["error": ["code": "bad_request", "message": $0]] } ?? ["result": ["ok": true]]
+    if let id = object["id"] { reply["id"] = id }
+    connection?.reply(PluginPageRelay.line(reply), ticket: 0)
+    return true
   }
 
   private func reapIfGone(_ onExit: @escaping (PluginProcess, Int32?, Int32?, Bool) -> Void) {
@@ -231,6 +243,7 @@ final class PluginProcess: PluginRun {
   }
 
   private func cleanUp() {
+    pageRelay.failAll("its program stopped")
     exitSource?.cancel()
     exitSource = nil
     memoryTimer?.cancel()

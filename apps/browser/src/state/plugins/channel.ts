@@ -14,7 +14,6 @@ import type { AutomationEventName } from "../automation/eventNames";
 import { activeManifest, currentPlugins, usePlugins } from "./store";
 import { answerCall, callTool, dropCalls } from "./tools";
 import { acceptsRun, onProcessStopped, processExited } from "./process";
-import { isLoopbackPageUrl } from "./pageUrls";
 import { valuesFor } from "./values";
 
 export const CHANNEL_PROTOCOL = 1;
@@ -58,16 +57,16 @@ function subscribe(c: Connection, m: PluginManifest, params: Record<string, unkn
   return { result: { ok: true } };
 }
 
-function pageTokenOf(name: string, run: number): string {
+function pageSecretOf(name: string, run: number): string {
   const state = usePlugins.getState().processes[name];
-  return state?.state === "running" && state.run === run ? (state.pageToken ?? "") : "";
+  return state?.state === "running" && state.run === run ? (state.pageSecret ?? "") : "";
 }
 
 function servePage(name: string, run: number, m: PluginManifest, params: Record<string, unknown>): Body {
   if (!m.page || !("served" in m.page.source)) return failure("refused", "This plugin's page isn't served by its helper.");
-  if (typeof params.url !== "string" || !isLoopbackPageUrl(params.url)) return failure("bad_request", "page.serve needs an http URL on 127.0.0.1, localhost or [::1] with a port.");
-  usePlugins.setState((s) => ({ servedUrls: { ...s.servedUrls, [name]: params.url as string } }));
-  return { result: { ok: true, pageToken: pageTokenOf(name, run) } };
+  if (params.url !== undefined) return failure("bad_request", "page.serve takes no URL: Ardia asks the helper for each page request on this channel (pageRequest), and the page is never loaded from a port.");
+  usePlugins.setState((s) => ({ pageReady: { ...s.pageReady, [name]: run } }));
+  return { result: { ok: true } };
 }
 
 function openPage(name: string, m: PluginManifest, params: Record<string, unknown>): Body {
@@ -95,7 +94,7 @@ async function toolsCall(name: string, m: PluginManifest, params: Record<string,
 function answer(c: Connection, m: PluginManifest, method: string, params: Record<string, unknown>): Body | Promise<Body> {
   switch (method) {
     case "hello":
-      return { result: { app: "Ardia", version: systemInfo().appVersion, protocol: CHANNEL_PROTOCOL, plugin: c.name, values: valuesFor(c.name), pageToken: pageTokenOf(c.name, c.run) } };
+      return { result: { app: "Ardia", version: systemInfo().appVersion, protocol: CHANNEL_PROTOCOL, plugin: c.name, values: valuesFor(c.name), pageSecret: pageSecretOf(c.name, c.run) } };
     case "values":
       return { result: valuesFor(c.name) };
     case "subscribe":
@@ -158,11 +157,11 @@ function deliver(name: AutomationEventName, data: Record<string, unknown>, time:
 }
 
 export function dropConnections(name: string) {
-  if (currentPlugins().servedUrls[name])
+  if (currentPlugins().pageReady[name] !== undefined)
     usePlugins.setState((s) => {
-      const servedUrls = { ...s.servedUrls };
-      delete servedUrls[name];
-      return { servedUrls };
+      const pageReady = { ...s.pageReady };
+      delete pageReady[name];
+      return { pageReady };
     });
   let changed = false;
   for (const [k, c] of connections) {

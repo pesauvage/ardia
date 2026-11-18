@@ -55,15 +55,15 @@ export function reconcilePlugins() {
     else stopProcess(name);
   }
   for (const name of supervisedNames()) if (!active.has(name)) stopProcess(name);
-  for (const name of Object.keys(s.servedUrls)) if (!active.has(name)) withdraw(name);
+  for (const name of Object.keys(s.pageReady)) if (!active.has(name)) withdraw(name);
 }
 
 function withdraw(name: string) {
   dropCalls(name);
   usePlugins.setState((s) => {
-    const servedUrls = { ...s.servedUrls };
-    delete servedUrls[name];
-    return { servedUrls };
+    const pageReady = { ...s.pageReady };
+    delete pageReady[name];
+    return { pageReady };
   });
 }
 

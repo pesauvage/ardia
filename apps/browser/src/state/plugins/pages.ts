@@ -61,25 +61,18 @@ function withParam(url: string, key: string, value: string): string {
   return `${head}${head.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(value)}${fragment}`;
 }
 
-function servedAt(served: string, path: string): string {
-  if (!path) return served;
-  const origin = /^http:\/\/[^/?#]+/.exec(served)?.[0] ?? served;
-  const cut = served.indexOf("#");
-  return `${origin}${path.startsWith("/") ? path : `/${path}`}${cut < 0 ? "" : served.slice(cut)}`;
-}
-
-export function pageViewUrl(s: Pick<PluginsStore, "listings" | "records" | "servedUrls">, name: string, context: PageContext | null, path = ""): string | null {
+export function pageViewUrl(s: Pick<PluginsStore, "listings" | "records" | "pageReady">, name: string, path = ""): string | null {
   const page = activeManifest(s, name)?.page;
   if (!page || !isPagePath(path)) return null;
-  const file = "file" in page.source ? `ardia-plugin://${name}/${page.source.file.split("/").map(encodeURIComponent).join("/")}` : null;
-  const served = file ? null : (s.servedUrls[name] ?? null);
-  let url = file ? (path ? withParam(file, "ardiaPath", path) : file) : served ? servedAt(served, path) : null;
+  if ("served" in page.source) return s.pageReady[name] ? `ardia-plugin://${name}${path.startsWith("/") ? path : `/${path}`}` : null;
+  const file = `ardia-plugin://${name}/${page.source.file.split("/").map(encodeURIComponent).join("/")}`;
+  return path ? withParam(file, "ardiaPath", path) : file;
+}
+
+export function shownContext(s: Pick<PluginsStore, "listings" | "records">, name: string, context: PageContext | null): PageContext | null {
   const permissions = activeManifest(s, name)?.permissions ?? [];
-  if (url && context && permissions.includes("tabs")) {
-    const shown = permissions.includes("fullUrls") ? context : { ...context, url: minimizedUrl(context.url) };
-    url = withParam(url, "ardiaContext", JSON.stringify(shown));
-  }
-  return url;
+  if (!context || !permissions.includes("tabs")) return null;
+  return permissions.includes("fullUrls") ? context : { ...context, url: minimizedUrl(context.url) };
 }
 
 function contextOf(name: string, tabId: string | null): PageContext | null {

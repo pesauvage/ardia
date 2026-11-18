@@ -40,12 +40,14 @@ public class PluginsModule: Module {
       .runOnQueue(.main)
 
     View(PluginPageView.self) {
-      Events("onOpenUrl", "onLoaded", "onRefused")
+      Events("onOpenUrl", "onLoaded")
       Prop("plugin") { (view: PluginPageView, value: String) in view.plugin = value }
       Prop("url") { (view: PluginPageView, value: String) in view.url = value }
       Prop("network") { (view: PluginPageView, value: Bool) in view.network = value }
       Prop("folderId") { (view: PluginPageView, value: String) in view.folderId = value }
-      Prop("pageToken") { (view: PluginPageView, value: String) in view.pageToken = value }
+      Prop("served") { (view: PluginPageView, value: Bool) in view.served = value }
+      Prop("secret") { (view: PluginPageView, value: String) in view.secret = value }
+      Prop("context") { (view: PluginPageView, value: String) in view.context = value }
     }
 
     OnDestroy {

@@ -9,7 +9,7 @@ export type PluginFolderEntry = {
 };
 
 export type PluginStartSpec = { name: string; run: string[]; memoryMB: number; network: boolean; folderId: string; approved: string };
-export type PluginStartResult = { ok: true; run: number; pid: number; pageToken: string } | { ok: false; reason: string };
+export type PluginStartResult = { ok: true; run: number; pid: number; pageSecret: string } | { ok: false; reason: string };
 export type PluginExit = { name: string; run: number; status: number | null; signal: number | null; overMemory: boolean };
 export type PluginLine = { name: string; run: number; line: string };
 export type PluginRemoveResult = { ok: true } | { ok: false; reason: string };
@@ -37,8 +37,9 @@ export type PluginPageProps = ViewProps & {
   url: string;
   network: boolean;
   folderId: string;
-  pageToken: string;
-  onRefused?: (e: PluginPageEvent<{ url: string }>) => void;
+  served: boolean;
+  secret: string;
+  context: string;
   onOpenUrl?: (e: PluginPageEvent<{ url: string }>) => void;
   onLoaded?: (e: PluginPageEvent<{ url: string; title: string }>) => void;
 };
