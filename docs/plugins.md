@@ -256,8 +256,12 @@ settings only once it is saved, so a failed save changes nothing.
   every program reaches are reachable; a local server it starts may listen on any address; it isn't limited in CPU. Out of Ardia's reach: a program started through launchd or another app (`open`,
   `launchctl`), which isn't the helper's descendant and isn't held to its sandbox either; and a process started within
   the moment between a helper's fork and its own exit. Checking a process id's start time and signalling it are two
-  calls, so an id reused within microseconds in between could be hit. On a macOS without the responsibility calls,
-  Ardia falls back to the group and descendants, which a double fork escapes. If Ardia crashes, a helper that doesn't exit when its channel closes keeps
+  calls, so an id reused within microseconds in between could be hit. The responsibility calls
+  (`responsibility_spawnattrs_setdisclaim`, `responsibility_get_pid_responsible_for_pid`) aren't public API: Ardia looks
+  them up at runtime, and where they're missing it logs that and falls back to the group and descendants, which an
+  orphaned or double-forked process escapes. Unverified until a signed, notarised build is tried: that notarisation
+  accepts the lookup, and how macOS privacy prompts (TCC) attribute a helper that is responsible for itself; in a
+  development build, prompts name the helper's program rather than Ardia. If Ardia crashes, a helper that doesn't exit when its channel closes keeps
   running until it is stopped by hand. So the permissions below are what Ardia hands a helper through its channel and
   what the sandbox holds it to on disk and on the network; the gaps above are outside them. Issue #2495 moves the
   helper to a deny-by-default profile.

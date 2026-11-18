@@ -41,11 +41,11 @@ enum PluginProcessTree {
     return pids.prefix(Int(max(0, got))).filter { $0 > 0 }.compactMap(entry)
   }
 
-  static func family(of root: pid_t) -> Set<PluginProcessMember> {
+  static func family(of root: pid_t, byResponsibility: Bool = tracksResponsibility) -> Set<PluginProcessMember> {
     let entries = table()
     let excluded: Set<pid_t> = [0, 1, getpid()]
     var pids: Set<pid_t> = [root]
-    if let responsibleFor {
+    if byResponsibility, let responsibleFor {
       for e in entries where !excluded.contains(e.pid) && responsibleFor(e.pid) == root { pids.insert(e.pid) }
     }
     var grew = true

@@ -68,6 +68,17 @@ final class PluginProcessTreeTests: XCTestCase {
     XCTAssertTrue(waitGone(child))
   }
 
+  func testWithoutTheResponsibilityCallsTheGroupAndDescendantsAreStillFound() throws {
+    let (helper, child) = try startHelper()
+    defer {
+      kill(child, SIGKILL)
+      helper.terminate()
+    }
+    let pids = Set(PluginProcessTree.family(of: helper.processIdentifier, byResponsibility: false).map(\.pid))
+    XCTAssertTrue(pids.contains(child), "a setsid child is still the helper's descendant")
+    XCTAssertTrue(pids.contains(helper.processIdentifier))
+  }
+
   func testTheFamilyNeverTakesInThisProcessOrLaunchd() throws {
     let (helper, child) = try startHelper()
     defer {

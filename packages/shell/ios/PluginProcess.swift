@@ -110,33 +110,40 @@ final class PluginProcess: PluginRun {
     }
     var actions: posix_spawn_file_actions_t?
     var attributes: posix_spawnattr_t?
-    posix_spawn_file_actions_init(&actions)
-    posix_spawnattr_init(&attributes)
+    let actionsMade = posix_spawn_file_actions_init(&actions)
+    let attributesMade = posix_spawnattr_init(&attributes)
     defer {
-      posix_spawn_file_actions_destroy(&actions)
-      posix_spawnattr_destroy(&attributes)
+      if actionsMade == 0 { posix_spawn_file_actions_destroy(&actions) }
+      if attributesMade == 0 { posix_spawnattr_destroy(&attributes) }
     }
-    let actionResults = [
-      posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0),
-      posix_spawn_file_actions_adddup2(&actions, log, 1),
-      posix_spawn_file_actions_adddup2(&actions, log, 2),
-      posix_spawn_file_actions_adddup2(&actions, pair[1], channelFd),
-      posix_spawn_file_actions_addfchdir_np(&actions, folder.fd),
-    ]
-    if let failed = actionResults.first(where: { $0 != 0 }) {
+    guard actionsMade == 0, attributesMade == 0 else {
       Darwin.close(pair[0])
       Darwin.close(log)
-      return .failure(.refused("it couldn't be set up to start (\(errnoText(failed)))"))
+      return .failure(.refused("it couldn't be set up to start (\(errnoText(actionsMade != 0 ? actionsMade : attributesMade)))"))
     }
     var none = sigset_t()
     var all = sigset_t()
     sigemptyset(&none)
     sigfillset(&all)
-    posix_spawnattr_setsigmask(&attributes, &none)
-    posix_spawnattr_setsigdefault(&attributes, &all)
-    posix_spawnattr_setpgroup(&attributes, 0)
-    _ = PluginProcessTree.disclaim(&attributes)
-    posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF))
+    let setup = [
+      posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0),
+      posix_spawn_file_actions_adddup2(&actions, log, 1),
+      posix_spawn_file_actions_adddup2(&actions, log, 2),
+      posix_spawn_file_actions_adddup2(&actions, pair[1], channelFd),
+      posix_spawn_file_actions_addfchdir_np(&actions, folder.fd),
+      posix_spawnattr_setsigmask(&attributes, &none),
+      posix_spawnattr_setsigdefault(&attributes, &all),
+      posix_spawnattr_setpgroup(&attributes, 0),
+      posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF)),
+    ]
+    if let failed = setup.first(where: { $0 != 0 }) {
+      Darwin.close(pair[0])
+      Darwin.close(log)
+      return .failure(.refused("it couldn't be set up to start (\(errnoText(failed)))"))
+    }
+    if !PluginProcessTree.disclaim(&attributes) {
+      NSLog("[plugins] %@: macOS's responsibility calls aren't available, so its processes are tracked by group and descendants only", spec.name)
+    }
     let argv = ["/usr/bin/sandbox-exec"] + sandboxArguments + [launched] + spec.run.dropFirst()
     let env = environment(name: spec.name, data: data)
     var pid: pid_t = 0
