@@ -39,4 +39,19 @@ final class PluginPageOutboxTests: XCTestCase {
     XCTAssertEqual(outbox.post(plugin: "ai", approved: "h1", run: 2, view: nil, json: "from run 2"), .queued([]), "a message from the old run never reaches the new binding")
     XCTAssertEqual(outbox.post(plugin: "ai", approved: "h1", run: 3, view: nil, json: "from run 3"), .queued([next]))
   }
+
+  func testANewBridgeOnTheSameViewNeverSharesTheOldOnesSlots() {
+    let outbox = PluginPageOutbox()
+    let first = PageBinding.fresh(plugin: "ai", approved: "h1", run: 2)
+    let second = PageBinding.fresh(plugin: "ai", approved: "h1", run: 2)
+    XCTAssertNotEqual(first, second, "a rebuilt bridge on the same tab is never the old one")
+    outbox.bind(first)
+    for i in 0..<4 { _ = outbox.post(plugin: "ai", approved: "h1", run: 2, view: first.view, json: "\(i)") }
+    for _ in 0..<4 { _ = outbox.take(first) }
+    outbox.revoke(first)
+    outbox.bind(second)
+    for i in 0..<5 { _ = outbox.post(plugin: "ai", approved: "h1", run: 2, view: second.view, json: "\(i)") }
+    for _ in 0..<4 { outbox.delivered(first) }
+    XCTAssertEqual((0..<10).compactMap { _ in outbox.take(second) }.count, 4, "the old bridge's completions free nothing in the new one")
+  }
 }

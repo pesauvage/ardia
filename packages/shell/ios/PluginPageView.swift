@@ -42,7 +42,6 @@ final class PluginPageMessageBridge: NSObject, WKScriptMessageHandler {
 
 final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   static var live: [String: PluginPageView] = [:]
-  private static var views = 0
   private var bridge: PluginPageMessageBridge?
 
   let onLoaded = EventDispatcher()
@@ -54,7 +53,6 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   var approved = "" { didSet { if approved != oldValue { rebuild() } } }
   var run = 0 { didSet { if run != oldValue { rebuild() } } }
   var context = "" { didSet { if context != oldValue { handOver() } } }
-  let viewId: String
 
   static let offlinePolicy =
     "default-src 'self' ardia-plugin: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ardia-plugin:; form-action 'self'; worker-src 'none'"
@@ -73,8 +71,6 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private var allowedOrigin: (scheme: String, host: String, port: Int?)?
 
   required init(appContext: AppContext? = nil) {
-    Self.views += 1
-    viewId = "v\(Self.views)"
     super.init(appContext: appContext)
     wantsLayer = true
   }
@@ -106,7 +102,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: Self.storeIdentifier(plugin))
     configuration.setURLSchemeHandler(
       PluginSchemeHandler(plugin: plugin, folderId: folderId, approved: approved, policy: network ? nil : Self.offlinePolicy), forURLScheme: PluginSchemeHandler.scheme)
-    let bridge = PluginPageMessageBridge(PageBinding(plugin: plugin, approved: approved, run: run, view: viewId))
+    let bridge = PluginPageMessageBridge(PageBinding.fresh(plugin: plugin, approved: approved, run: run))
     self.bridge = bridge
     configuration.userContentController.add(bridge, contentWorld: .page, name: "ardia")
     configuration.userContentController.addUserScript(pageScript())
