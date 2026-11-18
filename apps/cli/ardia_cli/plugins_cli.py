@@ -1,6 +1,10 @@
+import ctypes
+import errno
 import json
+import os
 import re
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -294,6 +298,47 @@ def copy_tree(source: Path, target: Path) -> None:
     shutil.copytree(source, target, symlinks=True)
 
 
+RENAME_EXCL = 0x4
+RENAME_NOREPLACE = 0x1
+AT_FDCWD = -100
+
+
+def rename_no_replace(source: Path, target: Path) -> None:
+    if os.name == "nt":
+        os.rename(source, target)
+        return
+    libc = ctypes.CDLL(None, use_errno=True)
+    src, dst = os.fsencode(source), os.fsencode(target)
+    if sys.platform == "darwin":
+        result = libc.renamex_np(src, dst, RENAME_EXCL)
+    elif hasattr(libc, "renameat2"):
+        result = libc.renameat2(AT_FDCWD, src, AT_FDCWD, dst, RENAME_NOREPLACE)
+    else:
+        os.mkdir(target)
+        os.rename(source, target)
+        return
+    if result != 0:
+        code = ctypes.get_errno()
+        raise FileExistsError(code, os.strerror(code), str(target)) if code == errno.EEXIST else OSError(code, os.strerror(code), str(target))
+
+
+def publish(staged: Path, target: Path, aside: Path, force: bool) -> bool:
+    replaced = False
+    if force:
+        try:
+            os.rename(target, aside)
+            replaced = True
+        except FileNotFoundError:
+            pass
+    try:
+        rename_no_replace(staged, target)
+    except BaseException:
+        if replaced:
+            os.rename(aside, target)
+        raise
+    return replaced
+
+
 def cmd_install(args) -> int:
     source = Path(args.source).expanduser()
     try:
@@ -331,16 +376,19 @@ def cmd_install(args) -> int:
         problems = manifest_problems(args, copied) + ([] if copied.get("name") == name else [f"its name changed to {copied.get('name')} while it was copied"])
         if problems:
             raise config_files.ConfigError("; ".join(problems))
-        if target.is_symlink() or target.is_file():
-            target.unlink()
-        elif target.exists():
-            shutil.rmtree(target)
-        staged.rename(target)
+        replacing = publish(staged, target, staging / "previous", args.force)
+    except FileExistsError:
+        complain(f"ardia plugins install: {name} is already installed (--force replaces it)")
+        return 1
     except (config_files.ConfigError, OSError) as error:
         complain(f"ardia plugins install: {error}")
         return 1
     finally:
-        shutil.rmtree(staging, ignore_errors=True)
+        aside = staging / "previous"
+        if (aside.exists() or aside.is_symlink()) and not (target.exists() or target.is_symlink()):
+            complain(f"ardia plugins install: the {name} that was installed before is in {aside}")
+        else:
+            shutil.rmtree(staging, ignore_errors=True)
     state = "Replaced" if replacing else "Installed"
     say(f"{state} {name} in {target}. It's off: turn it on in Ardia's Settings › Plugins, or with ardia plugins enable {name}.")
     return 0

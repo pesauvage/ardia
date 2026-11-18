@@ -310,7 +310,10 @@ the installed app's); `enable`, `disable` and `call` need Ardia running with CLI
 - `ardia plugins list [--json]`: each plugin, its version, whether it's on and running, what it contributes, and its
   problems. With Ardia reachable it asks Ardia (`plugins` on the socket); otherwise it reads the files.
 - `ardia plugins install PATH [--force]`: copies a plugin folder (or a lone `plugin.json`) into the plugin folder,
-  after checking it against `plugin.schema.json`. `--force` replaces one already there. The plugin arrives off.
+  after checking it against `plugin.schema.json`. `--force` replaces one already there. The plugin arrives off. The
+  copy is published with a rename that never replaces anything (`renamex_np` with `RENAME_EXCL` on macOS,
+  `renameat2` with `RENAME_NOREPLACE` on Linux), so an install that appears meanwhile is never overwritten without
+  `--force`; a forced replace moves the old folder aside first and puts it back if publishing fails.
 - `ardia plugins check [NAME|PATH]`: checks manifests.
 
 `check` and `install` hold a manifest to what the app accepts: a version 0 manifest is migrated first and a newer

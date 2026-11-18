@@ -101,6 +101,31 @@ class PluginsCliTest(unittest.TestCase):
         self.assertIn("fullUrls needs tabs", err)
         self.assertFalse((self.data / "config" / "plugins" / "example").exists())
 
+    def test_install_never_replaces_a_plugin_that_appears_while_it_copies(self):
+        target = self.data / "config" / "plugins" / "example"
+        real_copy = plugins_cli.copy_tree
+
+        def another_install_lands_first(src, dst):
+            real_copy(src, dst)
+            target.mkdir(parents=True)
+            (target / "plugin.json").write_text('{"name": "example", "title": "Theirs"}')
+
+        with mock.patch.object(plugins_cli, "copy_tree", side_effect=another_install_lands_first):
+            status, _, err = self.ardia("install", str(EXAMPLE))
+        self.assertEqual(status, 1)
+        self.assertIn("already installed", err)
+        self.assertEqual(json.loads((target / "plugin.json").read_text())["title"], "Theirs")
+
+    def test_a_forced_replace_that_fails_keeps_the_old_install(self):
+        self.assertEqual(self.ardia("install", str(EXAMPLE))[0], 0)
+        target = self.data / "config" / "plugins" / "example"
+        before = (target / "plugin.json").read_text()
+        with mock.patch.object(plugins_cli, "rename_no_replace", side_effect=OSError("disk full")):
+            status, _, _ = self.ardia("install", str(EXAMPLE), "--force")
+        self.assertEqual(status, 1)
+        self.assertEqual((target / "plugin.json").read_text(), before, "the old install is still there")
+        self.assertEqual(sorted(p.name for p in target.parent.iterdir()), ["example"], "and nothing is left beside it")
+
     def test_list_and_remove_work_from_the_files_when_ardia_is_away(self):
         self.ardia("install", str(EXAMPLE))
         status, out, _ = self.ardia("list", "--json")
