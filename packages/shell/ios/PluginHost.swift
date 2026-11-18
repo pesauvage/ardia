@@ -118,7 +118,7 @@ final class PluginHost {
 
   func stop(_ name: String, run: Int, graceMs: Int, done: @escaping () -> Void) {
     queue.async { [self] in
-      lifecycle.enqueue(name, .stop) { [self] complete in
+      lifecycle.enqueue(name, run == 0 ? .stop : .stopRun) { [self] complete in
         runs.stopAll(name, onlyRun: run, graceMs: graceMs) {
           done()
           complete()

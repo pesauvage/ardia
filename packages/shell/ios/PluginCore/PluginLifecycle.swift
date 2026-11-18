@@ -2,7 +2,7 @@ import Foundation
 
 final class PluginLifecycle {
   enum Kind {
-    case start, stop, remove
+    case start, stop, stopRun, remove
   }
 
   private struct Operation {
@@ -15,7 +15,7 @@ final class PluginLifecycle {
   private var busy: Set<String> = []
 
   func enqueue(_ name: String, _ kind: Kind, cancelled: @escaping () -> Void = {}, work: @escaping (@escaping () -> Void) -> Void) {
-    if kind != .start {
+    if kind == .stop || kind == .remove {
       let queued = waiting[name] ?? []
       queued.filter { $0.kind == .start }.forEach { $0.cancelled() }
       waiting[name] = queued.filter { $0.kind != .start }

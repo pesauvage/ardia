@@ -54,4 +54,16 @@ final class PluginLifecycleTests: XCTestCase {
     XCTAssertTrue(deleted)
     XCTAssertEqual(spawned, [], "nothing was started under the folder being deleted")
   }
+
+  func testStoppingOneOldRunLeavesANewerQueuedStartInPlace() {
+    let old = FakeRun("ai", 1)
+    runs.installed(old)
+    lifecycle.enqueue("ai", .stop) { [self] done in runs.stopAll("ai", graceMs: 3000, done: done) }
+    var cancelled = false
+    start("ai") { cancelled = true }
+    lifecycle.enqueue("ai", .stopRun) { [self] done in runs.stopAll("ai", onlyRun: 1, graceMs: 0, done: done) }
+    XCTAssertFalse(cancelled, "a stale run's cleanup doesn't cancel the re-enable queued before it")
+    old.exit(in: runs)
+    XCTAssertEqual(spawned, [2])
+  }
 }
