@@ -5,6 +5,7 @@ import type { Body } from "../automation/controlSocket";
 import { openSettings } from "../settings/settingsWindows";
 import { disablePlugin, removePlugin, requestPluginConsent } from "./lifecycle";
 import { activeManifest, currentPlugins, needsReview, recordOf } from "./store";
+import { pluginRecordsSaved } from "./savedState";
 import { callTool } from "./tools";
 
 const nameOf = (params: Record<string, unknown>) => (typeof params.name === "string" ? params.name : null);
@@ -41,9 +42,12 @@ export function pluginSocketMethod(method: string, params: Record<string, unknow
       if (!requestPluginConsent(name)) return failure("refused", `${name} has problems, so it can't be turned on.`);
       openSettings("plugins", null, name);
       return { result: { waiting: true } };
-    case "plugins.disable":
+    case "plugins.disable": {
       if (!known) return failure("bad_request", `There's no plugin ${String(name)}.`);
-      return disablePlugin(name, consentNow()) ? { result: { ok: true } } : failure("failed", "Couldn't save plugins.json.");
+      const consent = consentNow();
+      if (!disablePlugin(name, consent)) return failure("failed", "Couldn't save plugins.json.");
+      return pluginRecordsSaved(consent).then((saved) => (saved ? { result: { ok: true } } : failure("failed", "It's off for now, but plugins.json couldn't be saved, so it may be on again after Ardia restarts.")));
+    }
     case "plugins.remove":
       if (!known) return failure("bad_request", `There's no plugin ${String(name)}.`);
       return removePlugin(name).then((r) => (r.ok ? { result: { ok: true } } : failure("failed", r.reason ?? "Couldn't remove it.")));

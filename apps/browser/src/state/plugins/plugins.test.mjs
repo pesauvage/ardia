@@ -252,7 +252,7 @@ test("socket methods list, enable (through the sheet), disable and remove", asyn
   assert.equal(list[0].name, "example");
   assert.equal(list[0].active, true);
   assert.deepEqual(list[0].contributes, ["settings", "commands", "page", "process", "hooks", "tools"]);
-  assert.deepEqual(pluginSocketMethod("plugins.disable", { name: "example" }), { result: { ok: true } });
+  assert.deepEqual(await pluginSocketMethod("plugins.disable", { name: "example" }), { result: { ok: true } });
   assert.deepEqual(pluginSocketMethod("plugins.enable", { name: "example" }), { result: { waiting: true } });
   assert.equal(activeManifest(P(), "example"), null, "enabling from the CLI only opens the sheet");
   lifecycle.dismissPluginConsent();
@@ -841,6 +841,29 @@ test("a rescan asked for while one runs reports with the token of the change tha
     host.listFails = false;
     setConsentPeriod(true, "plugins-test");
   }
+});
+
+test("a disable reported to the ardia command, and a removal, wait until plugins.json is on disk", async () => {
+  await enabled();
+  stub.refusedWrites.landingFails = true;
+  try {
+    const removal = await lifecycle.removePlugin("example");
+    assert.equal(removal.ok, false, "nothing is deleted while the disable that must precede it isn't saved");
+    assert.match(removal.reason, /plugins.json couldn't be saved/);
+    assert.deepEqual(host.removed, []);
+  } finally {
+    stub.refusedWrites.landingFails = false;
+  }
+  await enabled();
+  stub.refusedWrites.landingFails = true;
+  try {
+    const reply = await pluginSocketMethod("plugins.disable", { name: "example" });
+    assert.equal(reply.error?.code, "failed", "the command isn't told the plugin is off for good");
+  } finally {
+    stub.refusedWrites.landingFails = false;
+  }
+  await enabled();
+  assert.deepEqual(await pluginSocketMethod("plugins.disable", { name: "example" }), { result: { ok: true } });
 });
 
 test("an open queued when its run ends never runs", async () => {

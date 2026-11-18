@@ -8,7 +8,7 @@ import { consentNow, consentToken, type ConsentToken } from "../telemetry/choice
 import { warnFor } from "../telemetry/consoleConsent";
 import { listingOf } from "./appChecks";
 import { applySettingsPatch, planDisable, planEnable, spliceApplied } from "./defaults";
-import { writePluginRecords } from "./savedState";
+import { pluginRecordsSaved, writePluginRecords } from "./savedState";
 import { activeManifest, currentPlugins, NO_RECORD, recordOf, usePlugins, type PluginListing, type PluginRecord } from "./store";
 import { stopProcess, superviseProcess, supervisedNames } from "./process";
 import { dropCalls } from "./tools";
@@ -138,6 +138,7 @@ export async function removePlugin(name: string): Promise<{ ok: boolean; reason?
   if (!disablePlugin(name, consent)) return { ok: false, reason: "It couldn't be turned off, because plugins.json couldn't be saved." };
   removing.add(name);
   try {
+    if (!(await pluginRecordsSaved(consent))) return { ok: false, reason: "It couldn't be turned off, because plugins.json couldn't be saved." };
     const removed = await removePluginFiles(name).catch((error: unknown) => ({ ok: false as const, reason: String(error) }));
     if (!removed.ok) return removed;
     updateRecord(name, () => null, consent);

@@ -31,7 +31,7 @@ const testGlobals = globalThis as { acTestUserScripts?: UserScriptsHost };
 
 export const docs = new Map<string, string>();
 export const heldSaves = { on: false, queue: [] as (() => void)[] };
-export const refusedWrites = { on: false, returnsFalse: false };
+export const refusedWrites = { on: false, returnsFalse: false, landingFails: false };
 export const bangListServer: { reply: ((etag: string | null) => Promise<BangListReply>) | null } = { reply: null };
 export const appInfo: Partial<SystemInfo> = { appVersion: "1.0" };
 export const interfaceScaleNative = { scale: 1, applied: [] as number[], refuses: false, asked: [] as number[] };
@@ -183,7 +183,7 @@ const documents: Modules["ArdiaDocuments"] = {
       if (heldSaves.on) heldSaves.queue.push(land);
       else land();
     }),
-  documentSaved: () => (refusedWrites.on ? Promise.reject(new Error("save refused")) : Promise.resolve()),
+  documentSaved: () => (refusedWrites.on || refusedWrites.landingFails ? Promise.reject(new Error("save refused")) : Promise.resolve()),
   removeDocument: (name) => void docs.delete(name),
 };
 

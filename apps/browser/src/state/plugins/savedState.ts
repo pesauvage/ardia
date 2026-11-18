@@ -1,4 +1,4 @@
-import { readDocument, writeDocument } from "../../platform/documents";
+import { documentSaved, readDocument, writeDocument } from "../../platform/documents";
 import { isFields, type Fields } from "../../lib/decode";
 import { parseSaved, versionedJson } from "../../lib/savedDocument";
 import { NAME_PATTERN } from "../../lib/pluginManifest";
@@ -55,3 +55,12 @@ export function writePluginRecords(records: Record<string, PluginRecord>, consen
     return false;
   }
 }
+
+export const pluginRecordsSaved = (consent: ConsentToken | null): Promise<boolean> =>
+  documentSaved(PLUGINS_DOC).then(
+    () => true,
+    (error: unknown) => {
+      warnFor(consent, "[plugins] couldn't save plugins.json", error);
+      return false;
+    },
+  );
