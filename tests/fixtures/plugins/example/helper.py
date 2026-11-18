@@ -93,7 +93,7 @@ for line in reader:
             values.update(message["data"]["values"])
         else:
             seen.append({"event": message["event"], "tabId": message.get("data", {}).get("tabId")})
-    elif "id" in message and message["id"] in waiting:
-        waiting[message["id"]]["reply"] = message
-        waiting[message["id"]]["done"].set()
+    elif (pending := waiting.get(message.get("id"))) is not None:
+        pending["reply"] = message
+        pending["done"].set()
 sys.exit(0)
