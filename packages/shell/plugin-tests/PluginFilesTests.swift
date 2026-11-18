@@ -195,3 +195,26 @@ final class PluginPageFileTests: XCTestCase {
     XCTAssertNil(PluginFiles.readPageFile(path, folderId: id, approved: approved, relative: "page/index.html"), "an edited manifest stops the page at once")
   }
 }
+
+final class PluginReadAllTests: XCTestCase {
+  func testAReadErrorIsAFailedReadNotACrash() throws {
+    let path = FileManager.default.temporaryDirectory.appendingPathComponent("read-\(UUID().uuidString)").path
+    try "page".write(toFile: path, atomically: false, encoding: .utf8)
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    let fd = open(path, O_WRONLY)
+    XCTAssertGreaterThanOrEqual(fd, 0)
+    defer { close(fd) }
+    XCTAssertNil(PluginFiles.readAll(fd, limit: 1 << 20), "read fails with EBADF, and the request fails with it")
+  }
+
+  func testAReadStopsPastTheLimitAndReadsToTheEndOtherwise() throws {
+    let path = FileManager.default.temporaryDirectory.appendingPathComponent("read-\(UUID().uuidString)").path
+    try Data(repeating: 7, count: 200_000).write(to: URL(fileURLWithPath: path))
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    for (limit, expected) in [(200_000, 200_000), (199_999, nil)] as [(Int, Int?)] {
+      let fd = open(path, O_RDONLY)
+      defer { close(fd) }
+      XCTAssertEqual(PluginFiles.readAll(fd, limit: limit)?.count, expected)
+    }
+  }
+}

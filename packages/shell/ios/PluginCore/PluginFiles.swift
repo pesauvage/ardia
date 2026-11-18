@@ -117,8 +117,20 @@ enum PluginFiles {
     defer { Darwin.close(fd) }
     var info = stat()
     guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_size <= maxPageFile else { return nil }
-    let data = FileHandle(fileDescriptor: fd, closeOnDealloc: false).readData(ofLength: maxPageFile + 1)
-    return data.count <= maxPageFile ? data : nil
+    return readAll(fd, limit: maxPageFile)
+  }
+
+  static func readAll(_ fd: Int32, limit: Int) -> Data? {
+    var data = Data()
+    var chunk = [UInt8](repeating: 0, count: 64 << 10)
+    while true {
+      let got = chunk.withUnsafeMutableBytes { Darwin.read(fd, $0.baseAddress, $0.count) }
+      if got < 0 && errno == EINTR { continue }
+      if got < 0 { return nil }
+      if got == 0 { return data }
+      data.append(contentsOf: chunk[0..<got])
+      if data.count > limit { return nil }
+    }
   }
 
   static func localProgram(_ relative: String, in folder: OpenedFolder) -> String? {
