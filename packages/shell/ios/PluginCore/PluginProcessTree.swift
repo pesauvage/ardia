@@ -67,9 +67,11 @@ enum PluginProcessTree {
     return info.si_pid == pid
   }
 
-  static func withDescendants(_ members: Set<PluginProcessMember>) -> Set<PluginProcessMember> {
+  static func withDescendants(_ given: Set<PluginProcessMember>) -> Set<PluginProcessMember> {
     let entries = table()
     let excluded: Set<pid_t> = [0, 1, getpid()]
+    let listed = Dictionary(entries.map { ($0.pid, $0.started) }, uniquingKeysWith: { a, _ in a })
+    let members = given.filter { listed[$0.pid] == $0.started }
     var pids = Set(members.map(\.pid))
     var grew = true
     while grew {

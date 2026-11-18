@@ -48,6 +48,19 @@ final class PluginProcessTreeTests: XCTestCase {
     return false
   }
 
+  func testAMemberWhosePidNowNamesAnotherProcessBringsInNoneOfItsChildren() throws {
+    let (helper, child) = try startHelper()
+    defer {
+      kill(child, SIGKILL)
+      helper.terminate()
+    }
+    let now = try XCTUnwrap(PluginProcessTree.entry(helper.processIdentifier))
+    let reused = PluginProcessMember(pid: now.pid, started: now.started &+ 1)
+    XCTAssertFalse(PluginProcessTree.withDescendants([reused]).contains { $0.pid == child }, "the pid's current owner isn't the member, so its child isn't ours")
+    let same = PluginProcessMember(pid: now.pid, started: now.started)
+    XCTAssertTrue(PluginProcessTree.withDescendants([same]).contains { $0.pid == child }, "a member that still matches brings in its child")
+  }
+
   func testStoppingAHelperEndsAChildThatLeftItsProcessGroup() throws {
     let (helper, child) = try startHelper()
     defer { kill(child, SIGKILL) }
