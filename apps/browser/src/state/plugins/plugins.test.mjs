@@ -692,6 +692,7 @@ async function withPendingStop(run) {
 }
 
 const tabCount = () => Object.keys(S().tabs).length;
+const recordValues = (name) => P().records[name]?.values;
 
 test("Restart stops accepting the retiring run before it asks for the stop, so a queued open never runs", async () => {
   const run = await enabled();
@@ -891,6 +892,32 @@ test("when a helper that called another plugin's tools stops, its waiting calls 
   lifecycle.disablePlugin("example");
   host.folders = [{ name: "example", status: "ok", text: FIXTURE }];
   await lifecycle.rescanPlugins(consentToken());
+});
+
+test("a removal whose last plugins.json write fails says the files are gone, and a later scan drops the record", async () => {
+  await enabled();
+  lifecycle.setPluginValue("example", "greeting", "Hi");
+  let release;
+  host.removeGate = new Promise((resolve) => (release = resolve));
+  let result;
+  try {
+    const removal = lifecycle.removePlugin("example").then((r) => (result = r));
+    await settle();
+    stub.refusedWrites.on = true;
+    release();
+    await removal;
+  } finally {
+    host.removeGate = null;
+    stub.refusedWrites.on = false;
+  }
+  assert.equal(result.ok, false, "not reported as a clean removal");
+  assert.equal(result.removed, true, "but it says the files are gone");
+  assert.deepEqual(host.removed, ["example"]);
+  assert.ok(P().records.example, "the record is still there while plugins.json can't be written");
+  await lifecycle.rescanPlugins(consentToken());
+  assert.equal(P().records.example, undefined, "the next scan that can save drops it");
+  await install();
+  assert.equal(recordValues("example"), undefined, "a new install doesn't inherit the removed plugin's values");
 });
 
 test("an open queued when its run ends never runs", async () => {

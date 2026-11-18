@@ -59,9 +59,16 @@ export function reconcilePlugins(consent: ConsentToken | null) {
   for (const name of supervisedNames()) if (!active.has(name)) stopProcess(name, consent);
 }
 
+const toForget = new Set<string>();
+
+function forgetRemoved(consent: ConsentToken | null) {
+  for (const name of toForget) if (updateRecord(name, () => null, consent)) toForget.delete(name);
+}
+
 export function applyListings(listings: PluginListing[], consent: ConsentToken | null) {
   const byName = Object.fromEntries(listings.map((l) => [l.name, l]));
   usePlugins.setState({ listings: byName, order: listings.map((l) => l.name).sort() });
+  forgetRemoved(consent);
   reconcilePlugins(consent);
 }
 
@@ -132,7 +139,7 @@ export function disablePlugin(name: string, consent: ConsentToken | null): boole
 
 const removing = new Set<string>();
 
-export async function removePlugin(name: string): Promise<{ ok: boolean; reason?: string }> {
+export async function removePlugin(name: string): Promise<{ ok: boolean; removed?: boolean; reason?: string }> {
   if (removing.has(name)) return { ok: false, reason: "It is already being removed." };
   const consent = consentToken();
   if (!disablePlugin(name, consent)) return { ok: false, reason: "It couldn't be turned off, because plugins.json couldn't be saved." };
@@ -141,8 +148,10 @@ export async function removePlugin(name: string): Promise<{ ok: boolean; reason?
     if (!(await pluginRecordsSaved(consent))) return { ok: false, reason: "It couldn't be turned off, because plugins.json couldn't be saved." };
     const removed = await removePluginFiles(name).catch((error: unknown) => ({ ok: false as const, reason: String(error) }));
     if (!removed.ok) return removed;
-    updateRecord(name, () => null, consent);
+    const forgotten = updateRecord(name, () => null, consent) && (await pluginRecordsSaved(consent));
+    if (!forgotten) toForget.add(name);
     await rescanPlugins(consent);
+    if (!forgotten) return { ok: false, removed: true, reason: "Its files are removed, but plugins.json couldn't be updated; Ardia drops its record the next time it can save." };
     return { ok: true };
   } finally {
     removing.delete(name);

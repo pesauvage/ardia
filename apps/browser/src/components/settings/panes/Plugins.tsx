@@ -132,7 +132,7 @@ async function confirmRemove(name: string, title: string) {
   const ok = await confirm({ title: `Remove ${title}?`, message: `Its folder moves to the ${PLATFORM_TERMS.trash}, and its data and its panel's website data are deleted.`, confirmTitle: "Remove", destructive: true, windowId: SETTINGS_WINDOW_ID });
   if (!ok) return;
   const removed = await removePlugin(name);
-  if (removed.ok) goToSettingsPane("plugins");
+  if (removed.ok || removed.removed) goToSettingsPane("plugins");
 }
 
 function PluginPage({ name }: { name: string }) {
