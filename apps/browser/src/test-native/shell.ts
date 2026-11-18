@@ -429,6 +429,8 @@ export const pluginHost = {
   startResult: null as null | { ok: false; reason: string },
   removeGate: null as null | Promise<void>,
   stopGate: null as null | Promise<void>,
+  listGate: null as null | Promise<void>,
+  listFails: false,
   nextRun: 0,
 };
 const pluginEvents = nativeEvents();
@@ -436,7 +438,11 @@ export const emitPluginLine = (line: { name: string; run: number; line: string }
 export const emitPluginExit = (exit: { name: string; run: number; status: number | null; signal: number | null; overMemory: boolean }) => pluginEvents.emit("onExit", exit);
 const plugins: Modules["ArdiaPlugins"] = {
   folder: () => "/config/plugins",
-  list: async () => pluginHost.folders.map((f) => ({ ...f })),
+  list: async () => {
+    await pluginHost.listGate;
+    if (pluginHost.listFails) throw new Error("the plugins folder couldn't be listed");
+    return pluginHost.folders.map((f) => ({ ...f }));
+  },
   start: async (spec) => {
     pluginHost.starts.push({ ...spec, run: [...spec.run] });
     if (pluginHost.startResult) return pluginHost.startResult;

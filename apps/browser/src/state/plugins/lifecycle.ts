@@ -66,23 +66,25 @@ export function applyListings(listings: PluginListing[], consent: ConsentToken |
 }
 
 let scanning: Promise<void> | null = null;
-let again = false;
+let nextScan: { consent: ConsentToken | null } | null = null;
 
-export function rescanPlugins(): Promise<void> {
+export function rescanPlugins(consent: ConsentToken | null): Promise<void> {
   if (scanning) {
-    again = true;
+    nextScan = { consent };
     return scanning;
   }
-  const consent = consentToken();
   scanning = (async () => {
-    do {
-      again = false;
+    let scan: { consent: ConsentToken | null } | null = { consent };
+    while (scan) {
+      const asked = scan.consent;
+      nextScan = null;
       const entries = await listPluginFolders().catch((error: unknown) => {
-        warnFor(consent, "[plugins] couldn't list the plugins folder", error);
+        warnFor(asked, "[plugins] couldn't list the plugins folder", error);
         return null;
       });
-      if (entries) applyListings(listingsOf(entries), consent);
-    } while (again);
+      if (entries) applyListings(listingsOf(entries), asked);
+      scan = nextScan;
+    }
   })().finally(() => {
     scanning = null;
   });
@@ -139,7 +141,7 @@ export async function removePlugin(name: string): Promise<{ ok: boolean; reason?
     const removed = await removePluginFiles(name).catch((error: unknown) => ({ ok: false as const, reason: String(error) }));
     if (!removed.ok) return removed;
     updateRecord(name, () => null, consent);
-    await rescanPlugins();
+    await rescanPlugins(consent);
     return { ok: true };
   } finally {
     removing.delete(name);
@@ -160,5 +162,5 @@ export { loadPluginRecords } from "./records";
 export function watchPluginFolder() {
   if (started) return;
   started = true;
-  onConfigChange(() => void rescanPlugins());
+  onConfigChange(() => void rescanPlugins(consentToken()));
 }

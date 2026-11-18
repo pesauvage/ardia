@@ -18,6 +18,8 @@ const { consentLines } = await import("./consent.ts");
 const { useToasts } = await import("../app/toasts.ts");
 const { setConsentPeriod } = await import("../telemetry/consentPeriod.ts");
 const { setQuitting } = await import("../app/quit.ts");
+const { consentToken } = await import("../telemetry/consentPeriod.ts");
+const { logConsent } = await import("../telemetry/consoleConsent.ts");
 setConsentPeriod(true, "plugins-test");
 
 const FIXTURE = readFileSync(new URL("../../../../../tests/fixtures/plugins/example/plugin.json", import.meta.url), "utf8");
@@ -39,7 +41,7 @@ function resetHost() {
 
 async function install(text = FIXTURE, name = "example") {
   host.folders = [{ name, status: "ok", text }];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
 }
 
 async function enabled() {
@@ -239,7 +241,7 @@ test("problems keep a plugin from loading; a folder whose name differs from the 
   assert.equal(P().listings.renamed.manifest, null);
   assert.ok(P().listings.renamed.problems.some((p) => p.includes("its folder is renamed")));
   host.folders = [{ name: "broken", status: "tooBig" }];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
   assert.deepEqual(P().listings.broken.problems, ["plugin.json is over 1 MB"]);
 });
 
@@ -265,7 +267,7 @@ test("a helper can't reach through another plugin's tools to a permission it was
   other.name = "other";
   other.permissions = ["tabs", "commands", "network"];
   host.folders = [{ name: "example", status: "ok", text: FIXTURE }, { name: "other", status: "ok", text: JSON.stringify(other) }];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
   assert.ok(lifecycle.requestPluginConsent("other"));
   assert.ok(lifecycle.enablePlugin("other", P().consent.hash));
   await settle();
@@ -309,7 +311,7 @@ test("two plugins setting the same setting: whichever leaves, the other's value 
   second.name = "second";
   second.settings.defaults = { commandBarStart: { openTabs: { limit: 2 } } };
   host.folders = [{ name: "example", status: "ok", text: FIXTURE }, { name: "second", status: "ok", text: JSON.stringify(second) }];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
   const on = (name) => (assert.ok(lifecycle.requestPluginConsent(name)), assert.ok(lifecycle.enablePlugin(name, P().consent.hash)));
   on("example");
   on("second");
@@ -348,12 +350,12 @@ test("pages take a path: each path is its own tab, and a helper opens them with 
 
 test("a plugin folder replaced on disk needs a new approval, even with the same plugin.json", async () => {
   host.folders = [{ name: "example", status: "ok", text: FIXTURE, folderId: "1:100" }];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
   assert.ok(lifecycle.requestPluginConsent("example") && lifecycle.enablePlugin("example", P().consent.hash));
   await settle();
   assert.deepEqual([host.starts.at(-1).folderId, host.starts.at(-1).approved], ["1:100", P().records.example.approved], "the helper starts bound to the folder and manifest you approved");
   host.folders = [{ name: "example", status: "ok", text: FIXTURE, folderId: "1:200" }];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
   assert.ok(needsReview(P(), "example"), "a new folder identity is a change");
   assert.equal(activeManifest(P(), "example"), null);
   lifecycle.disablePlugin("example");
@@ -366,7 +368,7 @@ test("two plugins setting the same value: turning the first off keeps it while t
   const twin = JSON.parse(FIXTURE);
   twin.name = "twin";
   host.folders = [{ name: "example", status: "ok", text: FIXTURE }, { name: "twin", status: "ok", text: JSON.stringify(twin) }];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
   for (const name of ["example", "twin"]) assert.ok(lifecycle.requestPluginConsent(name) && lifecycle.enablePlugin(name, P().consent.hash));
   lifecycle.disablePlugin("example");
   assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 5 } });
@@ -458,7 +460,7 @@ test("defaults unwind in the order they were applied, even when a later plugin s
   light.name = "light";
   light.settings.defaults = { commandBarStart: original };
   host.folders = [{ name: "dark", status: "ok", text: JSON.stringify(dark) }, { name: "light", status: "ok", text: JSON.stringify(light) }];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
   for (const name of ["dark", "light"]) assert.ok(lifecycle.requestPluginConsent(name) && lifecycle.enablePlugin(name, P().consent.hash));
   assert.deepEqual(S().settings.commandBarStart, original);
   lifecycle.disablePlugin("light");
@@ -529,10 +531,10 @@ test("approving a plugin's changed manifest takes its old default out of the sta
     return { name, status: "ok", text: JSON.stringify(doc) };
   };
   host.folders = [make("first", 2), make("second", 3)];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
   for (const name of ["first", "second"]) assert.ok(lifecycle.requestPluginConsent(name) && lifecycle.enablePlugin(name, P().consent.hash));
   host.folders = [make("first", 4), make("second", 3)];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
   assert.ok(lifecycle.requestPluginConsent("first") && lifecycle.enablePlugin("first", P().consent.hash));
   assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 4 } });
   lifecycle.disablePlugin("first");
@@ -547,7 +549,7 @@ test("a plugin named like an Object property gets its own record", async () => {
   const doc = JSON.parse(FIXTURE);
   doc.name = "constructor";
   host.folders = [{ name: "constructor", status: "ok", text: JSON.stringify(doc) }];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
   lifecycle.setPluginValue("constructor", "loud", true);
   assert.deepEqual(P().records.constructor.applied, {}, "a whole record, not Object's constructor");
   assert.ok(lifecycle.requestPluginConsent("constructor") && lifecycle.enablePlugin("constructor", P().consent.hash));
@@ -564,7 +566,7 @@ test("a value you chose between two plugins comes back when both leave, in eithe
     return { name, status: "ok", text: JSON.stringify(doc) };
   };
   host.folders = [make("first", 2), make("second", 3)];
-  await lifecycle.rescanPlugins();
+  await lifecycle.rescanPlugins(consentToken());
   assert.ok(lifecycle.requestPluginConsent("first") && lifecycle.enablePlugin("first", P().consent.hash));
   S().updateSettings({ commandBarStart: { openTabs: { limit: 7 } } });
   assert.ok(lifecycle.requestPluginConsent("second") && lifecycle.enablePlugin("second", P().consent.hash));
@@ -740,6 +742,69 @@ test("while Ardia is quitting no helper request is taken, and a cancelled quit t
   }
   assert.equal((await ask("open", { urls: ["https://b.example/cancelled"] }, run)).result?.ok, true);
   lifecycle.disablePlugin("example");
+});
+
+async function scanWarningTokens(run) {
+  const seen = [];
+  const original = console.warn;
+  console.warn = (...args) => void (String(args[0]).includes("couldn't list the plugins folder") && seen.push(logConsent()));
+  try {
+    await run();
+  } finally {
+    console.warn = original;
+  }
+  return seen;
+}
+
+test("a removal's follow-up scan reports in the period the removal began in", async () => {
+  await enabled();
+  setConsentPeriod(false, "plugins-test-off");
+  const begun = consentToken();
+  let release;
+  host.removeGate = new Promise((resolve) => (release = resolve));
+  try {
+    const seen = await scanWarningTokens(async () => {
+      const removing = lifecycle.removePlugin("example");
+      await settle();
+      setConsentPeriod(true, "plugins-test-on-again");
+      host.listFails = true;
+      release();
+      await removing;
+    });
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0], begun, "the warning carries the token taken when the removal began, not the newer period's");
+  } finally {
+    host.removeGate = null;
+    host.listFails = false;
+    setConsentPeriod(true, "plugins-test");
+  }
+});
+
+test("a rescan asked for while one runs reports with the token of the change that asked for it", async () => {
+  S().hydrate({});
+  startPlugins();
+  await install();
+  let release;
+  host.listGate = new Promise((resolve) => (release = resolve));
+  try {
+    const first = consentToken();
+    const seen = await scanWarningTokens(async () => {
+      const scanning = lifecycle.rescanPlugins(first);
+      setConsentPeriod(true, "plugins-test-later");
+      assert.notEqual(consentToken(), first);
+      void lifecycle.rescanPlugins(consentToken());
+      host.listFails = true;
+      release();
+      await scanning;
+    });
+    assert.equal(seen.length, 2);
+    assert.equal(seen[0], first);
+    assert.equal(seen[1], consentToken(), "the queued scan reports in the period of the change that asked for it");
+  } finally {
+    host.listGate = null;
+    host.listFails = false;
+    setConsentPeriod(true, "plugins-test");
+  }
 });
 
 test("an open queued when its run ends never runs", async () => {
