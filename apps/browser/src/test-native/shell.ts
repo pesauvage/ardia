@@ -428,6 +428,7 @@ export const pluginHost = {
   removed: [] as string[],
   startResult: null as null | { ok: false; reason: string },
   stopGate: null as null | Promise<void>,
+  removeGate: null as null | Promise<void>,
   nextRun: 0,
 };
 const pluginEvents = nativeEvents();
@@ -449,7 +450,7 @@ const plugins: Modules["ArdiaPlugins"] = {
   reply: (name, run, line) => void pluginHost.replies.push({ name, run, line }),
   event: (name, run, line) => void pluginHost.events.push({ name, run, line }),
   call: (name, run, line) => void pluginHost.events.push({ name, run, line }),
-  remove: async (name) => (pluginHost.removed.push(name), (pluginHost.folders = pluginHost.folders.filter((f) => f.name !== name)), { ok: true }),
+  remove: async (name) => (await pluginHost.removeGate, pluginHost.removed.push(name), (pluginHost.folders = pluginHost.folders.filter((f) => f.name !== name)), { ok: true }),
   revealLog: () => {},
   revealFolder: () => {},
   devSnapshotPage: async () => false,

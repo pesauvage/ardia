@@ -615,3 +615,28 @@ test("a value you chose between two plugins comes back when both leave, in eithe
   lifecycle.disablePlugin("second");
   assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 7 } }, "your own value, not the one from before the first plugin");
 });
+
+test("removing stops when turning the plugin off can't be saved, and nothing turns it on while it goes", async () => {
+  await enabled();
+  const hash = P().records.example.approved;
+  stub.refusedWrites.on = true;
+  try {
+    const failed = await lifecycle.removePlugin("example");
+    assert.equal(failed.ok, false);
+    assert.deepEqual(host.removed, [], "its files stay");
+    assert.ok(activeManifest(P(), "example"), "and it stays on");
+  } finally {
+    stub.refusedWrites.on = false;
+  }
+  let release;
+  host.removeGate = new Promise((resolve) => (release = resolve));
+  try {
+    const removing = lifecycle.removePlugin("example");
+    await settle();
+    assert.equal(lifecycle.enablePlugin("example", hash), false, "a removal in progress can't be undone by turning it on");
+    release();
+    assert.deepEqual(await removing, { ok: true });
+  } finally {
+    host.removeGate = null;
+  }
+});

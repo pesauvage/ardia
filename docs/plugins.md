@@ -187,9 +187,9 @@ plugin folder's identity on disk (device and inode, after links) in `plugins.jso
   build that starts it for the perf probe.
 - Turning off: the helper stops, its page tabs say it's off, commands, rows, hooks and tools go, and settings defaults
   go back.
-- Remove (Settings, or `ardia plugins remove`) turns it off, waits for its helper (and any run still stopping) to exit,
-  then moves the folder to the Trash and deletes its
-  `PluginData` folder and its page's website data. An instance on a scratch `ARDIA_DATA_DIR` deletes the folder
+- Remove (Settings, or `ardia plugins remove`) turns it off (if that can't be saved, nothing is removed), waits for its
+  helper (and any run still stopping) to exit, then moves the folder to the Trash and deletes its
+  `PluginData` folder and its page's website data. While it is being removed, the plugin can't be turned on. An instance on a scratch `ARDIA_DATA_DIR` deletes the folder
   instead, so tests never fill the Trash.
 
 `plugins.json` (version 1): `{ "plugins": { "<name>": { "enabled", "approved" (manifest hash), "values" (row values),

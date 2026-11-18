@@ -107,7 +107,7 @@ export const dismissPluginConsent = () => usePlugins.setState({ consent: null })
 
 export function enablePlugin(name: string, hash: string): boolean {
   const listing = currentPlugins().listings[name];
-  if (!listing?.manifest || listing.hash !== hash) return false;
+  if (!listing?.manifest || listing.hash !== hash || removing.has(name)) return false;
   const manifest = listing.manifest;
   const before = recordOf(currentPlugins(), name);
   const values = { ...defaultValues(manifest), ...before.values };
@@ -134,14 +134,22 @@ export function disablePlugin(name: string): boolean {
   return true;
 }
 
+const removing = new Set<string>();
+
 export async function removePlugin(name: string): Promise<{ ok: boolean; reason?: string }> {
-  disablePlugin(name);
-  await processStopped(name);
-  const removed = await removePluginFiles(name).catch((error: unknown) => ({ ok: false as const, reason: String(error) }));
-  if (!removed.ok) return removed;
-  updateRecord(name, () => null);
-  await rescanPlugins();
-  return { ok: true };
+  if (removing.has(name)) return { ok: false, reason: "It is already being removed." };
+  if (!disablePlugin(name)) return { ok: false, reason: "It couldn't be turned off, because plugins.json couldn't be saved." };
+  removing.add(name);
+  try {
+    await processStopped(name);
+    const removed = await removePluginFiles(name).catch((error: unknown) => ({ ok: false as const, reason: String(error) }));
+    if (!removed.ok) return removed;
+    updateRecord(name, () => null);
+    await rescanPlugins();
+    return { ok: true };
+  } finally {
+    removing.delete(name);
+  }
 }
 
 export function setPluginValue(name: string, key: string, value: string | boolean) {
