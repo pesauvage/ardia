@@ -90,7 +90,9 @@ async function openTabs(c: Connection, m: PluginManifest, params: Record<string,
   const { urls, activate } = params;
   if (!Array.isArray(urls) || urls.length < 1 || urls.length > MAX_OPEN_URLS || !urls.every(isPluginWebUrl))
     return failure("bad_request", `open takes urls: 1 to ${MAX_OPEN_URLS} http or https addresses, with no credentials, spaces or control characters.`);
-  return applyMethod({ ops: [{ op: "open", urls, ...(activate === true ? { activate: true } : {}) }] }, () => !!activeManifest(currentPlugins(), c.name));
+  const current = () => acceptsRun(c.name, c.run) && !!activeManifest(currentPlugins(), c.name)?.permissions.includes("commands");
+  const body = await applyMethod({ ops: [{ op: "open", urls, ...(activate === true ? { activate: true } : {}) }] }, current);
+  return body;
 }
 
 function answer(c: Connection, m: PluginManifest, method: string, params: Record<string, unknown>): Body | Promise<Body> {

@@ -631,3 +631,13 @@ test("open takes only http and https URLs, at most ten, refusing everything else
   lifecycle.disablePlugin("example");
 });
 
+test("an open queued when its run ends never runs", async () => {
+  const run = await enabled();
+  S().createWindow({ url: "https://a.example/" });
+  const before = Object.keys(S().tabs).length;
+  helper("open", { urls: ["https://b.example/late"] }, run);
+  stub.emitPluginExit({ name: "example", run, status: 0, signal: null, overMemory: false });
+  await settle();
+  assert.equal(Object.keys(S().tabs).length, before, "the run that asked has ended, so nothing opens");
+  lifecycle.disablePlugin("example");
+});
