@@ -132,8 +132,9 @@ never sent to Chrome. A plugin with a page can't take the name of one of Ardia's
 
 `run` is the helper's argv: its first item is a file in the plugin's folder (`bin/helper`), an absolute path
 (`/usr/bin/python3`), or a bare name found on `/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin`.
-At most 32 items, each up to 1,024 bytes, no NUL. `memoryMB` (64 to 4,096, default 1,024) caps its memory. See
-[The helper](#the-helper).
+At most 32 items, each up to 1,024 bytes, no NUL. `memoryMB` (64 to 4,096, default 1,024) is a watchdog
+threshold, not a hard cap: Ardia checks the helper's own footprint every 10 seconds and stops it when it is over,
+so a helper can go past it between checks, and the processes it starts aren't counted. See [The helper](#the-helper).
 
 What the approval pins is the plugin's root folder, not the files in it. A program in the plugin's folder is checked
 through the approved, opened folder (one path component at a time, no links, an executable file) and started as
@@ -274,7 +275,9 @@ settings only once it is saved, so a failed save changes nothing.
 
 Descriptor 3 is a Unix stream socket to Ardia speaking the control socket's protocol (`docs/automation.md` ›
 Protocol: newline-delimited JSON, the same limits), private to this helper: nothing else can connect to it, and it
-works whether or not "Let the ardia command control Ardia" is on. A helper should exit when it closes.
+works whether or not "Let the ardia command control Ardia" is on. A helper should exit when it closes. A helper that
+closes descriptor 3 itself but keeps running is still the plugin's running helper: it gets no calls, events or page
+messages, its callers' tool calls fail at their deadline, and Restart (or exiting) starts it over.
 
 Requests from the helper (`{"id", "method", "params"}`):
 
@@ -308,7 +311,9 @@ A plugin's page and its helper talk through Ardia, never over a port:
 - **Helper to page.** `page.post {"message": value, "view"?: "v3"}` (at most 256 KB) fires a `message` event on
   `window.ardia` in that view, or in every view of the plugin when `view` is left out; the value is `event.data`.
   Each view holds at most 64 messages or 1 MB waiting, delivered in order a few at a time; past that `page.post`
-  answers `overloaded` and queues nothing, so a helper should wait for the page (or slow down) and send again.
+  answers `overloaded` and queues nothing, so a helper should wait for the page (or slow down) and send again. `ok`
+  means queued, not received: a message delivered before the page has loaded (before `window.ardia` exists) is
+  dropped, so a helper should post to a view only after that view's first message.
 - **Bound to a run.** Each page's web view gets its own bridge, fixed when it is made to that web view, the plugin, its
   approval, the run of the helper and a view id that is never used again. A message counts only if it comes from
   that same web view, and goes only to that run; `page.post` reaches only bridges of the run that sent it. The bridge
@@ -380,7 +385,8 @@ whichever profile the tab's window shows:
   });
   ```
 
-  and the helper answers `{"pageMessage": {"open": url}}` with `{"method": "open", "params": {"urls": [url]}}`. A
+  and the helper answers `{"pageMessage": {"open": url}}` with `{"id": 7, "method": "open", "params": {"urls": [url]}}`
+  (every request needs its own `id`, echoed in the reply). A
   plugin without `commands` can't open tabs.
 
 ## The ardia command
