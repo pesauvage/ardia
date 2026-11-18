@@ -318,7 +318,9 @@ the installed app's); `enable`, `disable` and `call` need Ardia running with CLI
   `--force`; a forced replace moves the old folder aside first and puts it back if publishing fails.
 - `ardia plugins check [NAME|PATH]`: checks manifests.
 
-`check` and `install` hold a manifest to what the app accepts: a version 0 manifest is migrated first and a newer
+`check` and `install` hold a manifest to what the app accepts, using the `plugin.schema.json` Ardia wrote for that data
+folder, else the one the `ardia` command ships with (`ardia_cli/schemas/`); settings defaults need Ardia's
+`config.schema.json`, and without it a manifest that sets any is refused as unchecked: a version 0 manifest is migrated first and a newer
 version than `plugin.schema.json` knows is refused; then the schema (rows included), the settings defaults against
 `config.schema.json`, and the rules a schema can't state (a command's tool exists, `context` needs `tabs`, a served page
 needs `network`, names are unique, …), with the app's own lists from the schema's `x-ardia-rules` (events that need

@@ -29,7 +29,9 @@ class PluginsCliTest(unittest.TestCase):
         self.data = Path(tempfile.mkdtemp(prefix="ardia-plugins-"))
         schema_dir = self.data / "config-schema"
         schema_dir.mkdir()
-        shutil.copy(FIXTURES / "plugin.schema.json", schema_dir / "plugin.schema.json")
+        shutil.copy(plugins_cli.SHIPPED_SCHEMA, schema_dir / "plugin.schema.json")
+        settings = {"type": "object", "properties": {"commandBarStart": {"type": "object"}}, "additionalProperties": False}
+        (schema_dir / "config.schema.json").write_text(json.dumps({"type": "object", "properties": {"settings": settings}}))
         self.unreachable = mock.patch.object(control, "call", side_effect=control.unreachable("test"))
         self.unreachable.start()
 
@@ -147,6 +149,21 @@ class PluginsCliTest(unittest.TestCase):
         status, out, _ = self.ardia("check", "renamed")
         self.assertEqual(status, 1)
         self.assertIn("but its folder is renamed", out)
+
+    def test_check_uses_the_schema_it_ships_when_ardia_has_written_none(self):
+        (self.data / "config-schema" / "plugin.schema.json").unlink()
+        (self.data / "config-schema" / "config.schema.json").unlink()
+        folder = self.data / "typo"
+        shutil.copytree(EXAMPLE, folder)
+        manifest = json.loads((folder / "plugin.json").read_text())
+        manifest["typo"] = True
+        (folder / "plugin.json").write_text(json.dumps(manifest))
+        status, out, _ = self.ardia("check", str(folder) + "/")
+        self.assertEqual(status, 1)
+        self.assertIn("typo", out)
+        status, out, _ = self.ardia("check", str(EXAMPLE) + "/")
+        self.assertEqual(status, 1, "settings defaults can't be checked without Ardia's config schema")
+        self.assertIn("config.schema.json", out)
 
     def test_list_and_remove_work_from_the_files_when_ardia_is_away(self):
         self.ardia("install", str(EXAMPLE))

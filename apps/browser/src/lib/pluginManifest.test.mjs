@@ -137,8 +137,8 @@ test("the CLI's plugin schema fixture is what the app writes", async () => {
   const { PLUGIN_EVENTS } = await import("../state/automation/eventNames.ts");
   const { pluginSchemaJson } = await import("./pluginSchema.ts");
   const { PLUGIN_RULES } = await import("../state/plugins/appChecks.ts");
-  const fixture = readFileSync(new URL("../../../cli/tests/fixtures/plugin.schema.json", import.meta.url), "utf8");
-  assert.equal(pluginSchemaJson(PLUGIN_EVENTS, PLUGIN_RULES), fixture, "regenerate apps/cli/tests/fixtures/plugin.schema.json");
+  const fixture = readFileSync(new URL("../../../cli/ardia_cli/schemas/plugin.schema.json", import.meta.url), "utf8");
+  assert.equal(pluginSchemaJson(PLUGIN_EVENTS, PLUGIN_RULES), fixture, "regenerate apps/cli/ardia_cli/schemas/plugin.schema.json");
 });
 
 test("every manifest in the shared rejected list is refused, the same list ardia plugins check refuses", async () => {

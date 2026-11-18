@@ -15,6 +15,7 @@ from ardia_cli.printable import complain, say, shown
 
 MANIFEST = "plugin.json"
 SCHEMA = "plugin.schema.json"
+SHIPPED_SCHEMA = Path(__file__).resolve().parent / "schemas" / SCHEMA
 NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 MAX_MANIFEST = 1 << 20
 MAX_COPY = 200 << 20
@@ -217,21 +218,27 @@ def schema_problems(where, doc: dict, schema: dict) -> list[str]:
     config = config_files.find_schema(where, "config.schema.json").document
     settings_schema = ((config or {}).get("properties") or {}).get("settings")
     defaults = doc["settings"].get("defaults") if isinstance(doc.get("settings"), dict) else None
-    if isinstance(settings_schema, dict) and isinstance(defaults, dict):
+    if isinstance(defaults, dict) and defaults and not isinstance(settings_schema, dict):
+        problems.append("settings.defaults can't be checked: Ardia hasn't written config.schema.json for this data folder yet (open Ardia once)")
+    elif isinstance(settings_schema, dict) and isinstance(defaults, dict):
         problems += [f"settings.defaults: {p.message}" for p in validate(defaults, settings_schema)]
     return problems
 
 
+def plugin_schema(where) -> dict:
+    written = config_files.find_schema(where, SCHEMA).document
+    return written if written is not None else json.loads(SHIPPED_SCHEMA.read_text(encoding="utf-8"))
+
+
 def manifest_problems(args, manifest: dict) -> list[str]:
     where = config_files.places(args.data_dir)
-    schema = config_files.find_schema(where, SCHEMA).document
-    known = (((schema or {}).get("properties") or {}).get("manifest") or {}).get("maximum", 1)
+    schema = plugin_schema(where)
+    known = ((schema.get("properties") or {}).get("manifest") or {}).get("maximum", 1)
     doc, problems = current_manifest(manifest, known)
     if doc is None:
         return problems
-    if schema is not None:
-        problems += schema_problems(where, doc, schema)
-    problems += rule_problems(doc, (schema or {}).get("x-ardia-rules") or {})
+    problems += schema_problems(where, doc, schema)
+    problems += rule_problems(doc, schema.get("x-ardia-rules") or {})
     name = doc.get("name")
     if not isinstance(name, str) or not NAME.match(name):
         problems.append("name must be 1 to 40 lowercase letters, digits and dashes, starting with a letter or digit")
