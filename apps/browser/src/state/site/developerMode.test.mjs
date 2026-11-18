@@ -81,14 +81,28 @@ test("Split View Options adds a pane on the side picked, and is disabled once th
     return Promise.resolve("left");
   };
   try {
-    while (splitTabIds(splitOf(S(), tabId) ?? { slots: [] }).length < MAX_SPLIT_PANES) await showSplitSidesMenu(tabId);
+    await showSplitSidesMenu(tabId);
+    const split = splitOf(S(), tabId);
+    assert.equal(split?.orientation, "horizontal");
+    const panes = splitTabIds(split);
+    assert.equal(panes.length, 2);
+    assert.deepEqual(panes.slice(1), [tabId], "the new pane went to the left of the page");
+    await showSplitSidesMenu(tabId);
+    assert.equal(splitTabIds(splitOf(S(), tabId)).length, MAX_SPLIT_PANES);
     await showSplitSidesMenu(tabId);
   } finally {
     menus.showMenu = real;
   }
   const actions = (items) => items.filter((it) => it.id).map((it) => [it.id, it.enabled]);
   assert.deepEqual(actions(shown[0]), [["right", true], ["left", true], ["top", true], ["bottom", true]]);
-  assert.deepEqual(actions(shown.at(-1)), [["right", false], ["left", false], ["top", false], ["bottom", false]]);
+  assert.deepEqual(actions(shown[2]), [["right", false], ["left", false], ["top", false], ["bottom", false]]);
   assert.equal(splitTabIds(splitOf(S(), tabId)).length, MAX_SPLIT_PANES);
-  assert.equal(splitTabIds(splitOf(S(), tabId))[0] === tabId, false, "the first pane went to the left");
+});
+
+test("the address the developer bar shows leaves out a username and password", async () => {
+  const { withoutUserInfo } = await import("../../lib/url.ts");
+  assert.equal(withoutUserInfo("http://admin:hunter2@localhost:3000/a?b=1#c"), "http://localhost:3000/a?b=1#c");
+  assert.equal(withoutUserInfo("https://user@example.com/"), "https://example.com/");
+  assert.equal(withoutUserInfo("http://localhost:3000/@me"), "http://localhost:3000/@me");
+  assert.equal(withoutUserInfo("http://localhost:5173/"), "http://localhost:5173/");
 });

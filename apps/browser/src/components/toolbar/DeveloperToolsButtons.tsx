@@ -9,12 +9,13 @@ import { usePageEngine } from "../../state/engines/hooks";
 
 export const DEVELOPER_BUTTON_ROW = { flexDirection: "row", alignItems: "center" } as const;
 
-export function DeveloperToolsButtons({ tabId, palette, look }: { tabId: string; palette: ToolbarPalette; look: "row" | "field" }) {
+export function DeveloperToolsButtons({ tabId, palette, look, onFocus }: { tabId: string; palette: ToolbarPalette; look: "row" | "field"; onFocus?: () => void }) {
   const consoleHint = useShortcutHint("javaScriptConsole");
   const inspectHint = useShortcutHint("inspectElements");
   const engine = usePageEngine(tabId);
   if (engine === "webkit") return null;
   const open = (panel: "console" | "inspect") => () => {
+    onFocus?.();
     noteDeveloperBarPress(panel);
     void webviews.get(tabId)?.showDevTools(panel);
   };

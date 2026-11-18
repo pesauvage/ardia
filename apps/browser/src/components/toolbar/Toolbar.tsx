@@ -1,5 +1,5 @@
 import { colorDistance } from "../../lib/color";
-import { pageHostLabel, urlTrail } from "../../lib/url";
+import { pageHostLabel, urlTrail, withoutUserInfo } from "../../lib/url";
 import { memo, useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Animated, Pressable, StyleSheet, View, type ViewStyle } from "react-native";
@@ -224,7 +224,7 @@ export const ToolbarUrlField = memo(function ToolbarUrlField({ tab, palette, win
         <Pressable onPress={field.openPanel} style={{ flex: 1, height: row.field, justifyContent: "center", paddingLeft: insecure ? LOCK.gap : urlTextLeft(false) }}>
           {field.developerMode ? (
             <Text numberOfLines={1} ellipsizeMode="middle" color={palette.text} style={monoFace()}>
-              {tab.url}
+              {withoutUserInfo(tab.url)}
             </Text>
           ) : (
             <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -256,7 +256,7 @@ export const ToolbarUrlField = memo(function ToolbarUrlField({ tab, palette, win
             <Button variant="icon" toolbar palette={palette} icon="slider.horizontal.3" look="field" onPress={toggleSiteControls} active={popover === "siteControls"} tooltip="Site Controls" />
           </>
         )}
-        {field.developerMode && <DeveloperToolsButtons tabId={tab.id} palette={palette} look="field" />}
+        {field.developerMode && <DeveloperToolsButtons tabId={tab.id} palette={palette} look="field" onFocus={onFocus} />}
       </FieldButtons>
     </View>
   );
