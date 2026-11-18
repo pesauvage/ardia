@@ -1,6 +1,7 @@
 import { View } from "react-native";
 import { Button } from "../ui";
 import { DEVELOPER_ICONS } from "./developerIcons";
+import { PLATFORM_FEATURES } from "../../lib/platformFeatures";
 import type { ToolbarPalette } from "../ui/toolbarColors";
 import { useShortcutHint, withShortcut } from "../../state/commands/commandShortcuts";
 import { webviews } from "../../state/tabs/webviewHandles";
@@ -14,7 +15,7 @@ export function DeveloperToolsButtons({ tabId, palette, look, onFocus, glyph }: 
   const inspectHint = useShortcutHint("inspectElements");
   const engine = usePageEngine(tabId);
   if (engine === "webkit") return null;
-  const open = (panel: "console" | "inspect") => () => {
+  const open = (panel: "console" | "network" | "inspect") => () => {
     onFocus?.();
     noteDeveloperBarPress(panel);
     void webviews.get(tabId)?.showDevTools(panel);
@@ -22,6 +23,9 @@ export function DeveloperToolsButtons({ tabId, palette, look, onFocus, glyph }: 
   return (
     <View style={DEVELOPER_BUTTON_ROW}>
       <Button variant="icon" toolbar palette={palette} asset={DEVELOPER_ICONS.console} glyph={glyph} look={look} onPress={open("console")} tooltip={withShortcut("Toggle Console", consoleHint)} />
+      {PLATFORM_FEATURES.devToolsPanels && (
+        <Button variant="icon" toolbar palette={palette} asset={DEVELOPER_ICONS.network} glyph={glyph} look={look} onPress={open("network")} tooltip="Toggle Network Panel" />
+      )}
       <Button variant="icon" toolbar palette={palette} asset={DEVELOPER_ICONS.inspect} glyph={glyph} look={look} onPress={open("inspect")} tooltip={withShortcut("Inspect Element", inspectHint)} />
     </View>
   );

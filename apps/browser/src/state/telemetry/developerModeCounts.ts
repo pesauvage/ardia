@@ -1,10 +1,11 @@
-export type DeveloperBarAction = "siteControls" | "address" | "copyLink" | "console" | "inspect" | "extensions" | "split";
+export type DeveloperBarAction = "siteControls" | "address" | "copyLink" | "console" | "network" | "inspect" | "extensions" | "split";
 
 const BAR_FIELDS: Record<DeveloperBarAction, string> = {
   siteControls: "developer_bar_site_controls",
   address: "developer_bar_address_opens",
   copyLink: "developer_bar_link_copies",
   console: "developer_bar_console_opens",
+  network: "developer_bar_network_opens",
   inspect: "developer_bar_inspects",
   extensions: "developer_bar_extension_runs",
   split: "developer_bar_split_menus",
