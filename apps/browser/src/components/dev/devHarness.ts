@@ -21,7 +21,8 @@ export function devPluginSeams(): (typeof import("../../state/plugins/store") &
   typeof import("../../state/plugins/pages") &
   typeof import("../../state/plugins/tools") &
   typeof import("../../state/plugins/commands") &
-  typeof import("../../state/plugins/socketMethods") & { snapshotPage: typeof import("../../platform/plugins").devSnapshotPluginPage }) | null {
+  typeof import("../../state/plugins/socketMethods") &
+  typeof import("../../state/plugins/process") & { snapshotPage: typeof import("../../platform/plugins").devSnapshotPluginPage }) | null {
   if (!__DEV__) return null;
   return {
     ...require("../../state/plugins/store"),
@@ -30,6 +31,7 @@ export function devPluginSeams(): (typeof import("../../state/plugins/store") &
     ...require("../../state/plugins/tools"),
     ...require("../../state/plugins/commands"),
     ...require("../../state/plugins/socketMethods"),
+    ...require("../../state/plugins/process"),
     snapshotPage: require("../../platform/plugins").devSnapshotPluginPage,
   };
 }
