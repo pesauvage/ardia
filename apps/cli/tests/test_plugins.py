@@ -126,6 +126,21 @@ class PluginsCliTest(unittest.TestCase):
         self.assertEqual((target / "plugin.json").read_text(), before, "the old install is still there")
         self.assertEqual(sorted(p.name for p in target.parent.iterdir()), ["example"], "and nothing is left beside it")
 
+    def test_a_forced_install_that_fails_its_checks_leaves_the_installed_plugin_on(self):
+        self.assertEqual(self.ardia("install", str(EXAMPLE))[0], 0)
+        broken = self.data / "broken"
+        shutil.copytree(EXAMPLE, broken)
+        manifest = json.loads((broken / "plugin.json").read_text())
+        manifest["permissions"] = ["fullUrls"]
+        (broken / "plugin.json").write_text(json.dumps(manifest))
+        real_copy = plugins_cli.copy_tree
+        self.unreachable.stop()
+        with mock.patch.object(control, "call", return_value={}) as call, mock.patch.object(plugins_cli, "manifest_problems", side_effect=[[], ["broken"]]), mock.patch.object(plugins_cli, "copy_tree", side_effect=real_copy):
+            status, _, _ = self.ardia("install", str(broken), "--force")
+        self.unreachable.start()
+        self.assertEqual(status, 1)
+        self.assertNotIn("plugins.disable", [c.args[1] for c in call.call_args_list], "nothing is turned off before the new copy passes")
+
     def test_list_and_remove_work_from_the_files_when_ardia_is_away(self):
         self.ardia("install", str(EXAMPLE))
         status, out, _ = self.ardia("list", "--json")

@@ -357,12 +357,7 @@ def cmd_install(args) -> int:
     if (target.exists() or target.is_symlink()) and not args.force:
         complain(f"ardia plugins install: {name} is already installed (--force replaces it)")
         return 1
-    replacing = target.exists() or target.is_symlink()
-    if replacing:
-        try:
-            ask(args, "plugins.disable", {"name": name})
-        except (Unreachable, MethodError):
-            pass
+    replacing = False
     folder.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=folder))
     try:
@@ -376,6 +371,11 @@ def cmd_install(args) -> int:
         problems = manifest_problems(args, copied) + ([] if copied.get("name") == name else [f"its name changed to {copied.get('name')} while it was copied"])
         if problems:
             raise config_files.ConfigError("; ".join(problems))
+        if args.force and (target.exists() or target.is_symlink()):
+            try:
+                ask(args, "plugins.disable", {"name": name})
+            except (Unreachable, MethodError):
+                pass
         replacing = publish(staged, target, staging / "previous", args.force)
     except FileExistsError:
         complain(f"ardia plugins install: {name} is already installed (--force replaces it)")
