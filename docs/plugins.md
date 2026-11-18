@@ -107,23 +107,20 @@ is never handed a private tab or a Peek: the same tabs hooks and the `ardia` com
 
 The plugin's page is a real tab at `ardia://<name>`, like `ardia://history`: it sits in the sidebar, takes a place in
 Split View and in tab groups, moves between windows and comes back with the session. `title` (up to 40 characters)
-names the tab and `icon` its command bar entry. The tab's content is one of:
+names the tab and `icon` its command bar entry. Its content is static files from the plugin's folder:
 
-- `"file": "page/index.html"`: a file in the plugin's folder, served as `ardia-plugin://<name>/page/index.html`.
+- `"file": "page/index.html"`: the page, served as `ardia-plugin://<name>/page/index.html` with everything it loads
+  from beside it.
   Only regular files inside the approved plugin folder are served: each is opened one path component at a time from
   that opened folder, and a link anywhere in its path is refused. At most 10 MB each, with their type from the
   extension; anything else is a 404.
-- `"served": true`: the helper serves it, over its channel, never from a port: the page is
-  `ardia-plugin://<name>/<path>`, and Ardia asks the helper for every document, script, style and image it loads
-  ([Served pages](#served-pages)). Until the helper says it is ready (`page.serve`) the tab says the plugin is
-  starting. A served page needs the `network` permission for now.
 
 A page tab can have a path, `ardia://<name>/<path>?<query>` (`ardia://ai/history`, `ardia://ai/chats/42`): each path
 is its own tab, and opening one that's already open in the window goes to it. A file page gets the path and query as
-`ardiaPath`; a served page is asked for them (`/chats/42?x=1`). When a command hands the page a tab, the page reads it
-as `window.ardia.context`, a JSON object `{"tabId", "url", "title"}` with its URL cut to the plugin's permissions, set
-before the page's own scripts run; a new one fires an `ardiacontext` event. It is never in the page's URL or in any
-request. The context belongs to that page tab, that plugin and that approval: it goes when the tab leaves the
+`ardiaPath`. When a command hands the page a tab, the page reads it as `window.ardia.context`, a JSON object
+`{"tabId", "url", "title"}` with its URL cut to the plugin's permissions, set before the page's own scripts run; a new
+one fires a `context` event on `window.ardia`. It is never in the page's URL or in any request. A page talks to its own
+helper through Ardia ([Pages and their helper](#pages-and-their-helper)); it never needs a port. The context belongs to that page tab, that plugin and that approval: it goes when the tab leaves the
 address it was opened at, and when the plugin is turned off, changes or is approved again. Navigation inside the page doesn't change the
 tab's address, title or back and forward yet (follow-up issue). While the plugin is off, changed or not running, the tab stays and says so, with a way to Settings; it is
 never sent to Chrome. A plugin with a page can't take the name of one of Ardia's or Chrome's own pages (`history`,
@@ -222,7 +219,7 @@ settings only once it is saved, so a failed save changes nothing.
 - **Supervised.** A helper that exits with a failure or a signal, or whose own process goes over `memoryMB` (a watchdog:
   its physical footprint checked every 10 s, not a hard cap, and its child processes aren't counted), is restarted after
   1, 2, 4, 8 then 16 s. After 5 failures within 10 minutes it stays stopped and its row says it crashed, with Restart.
-  A helper that exits with status 0 isn't restarted. Every start, restart timer, call and served page belongs to one
+  A helper that exits with status 0 isn't restarted. Every start, restart timer, call and page message belongs to one
   run of the helper; anything from an older run is ignored.
 - **Launched** with `posix_spawn` in its own process group, from the plugin's folder, through
   `/usr/bin/sandbox-exec` with Ardia's fixed profile (`PluginSandbox.swift`), the paths passed as its parameters (`-D`),
@@ -250,8 +247,7 @@ settings only once it is saved, so a failed save changes nothing.
   a defense against one built to escape. Known gaps: Apple Events aren't blocked (`appleevent-send` isn't enforced for
   a default-allow profile), so a helper could script an app that accepts them, Ardia's own AppleScript included, which
   stays behind its own settings; files your config folder links to outside your home are readable; the system services
-  every program reaches are reachable; a local server it starts may listen on any address (bind served pages to
-  `127.0.0.1`); it isn't limited in CPU. Out of Ardia's reach: a program started through launchd or another app (`open`,
+  every program reaches are reachable; a local server it starts may listen on any address; it isn't limited in CPU. Out of Ardia's reach: a program started through launchd or another app (`open`,
   `launchctl`), and one started less than a second before a helper exits on its own; both keep running, still inside
   the sandbox, until stopped by hand. Checking a process id's start time and signalling it are two calls, so an id
   reused within microseconds in between could be hit. On a macOS without the responsibility calls, Ardia falls back
@@ -270,48 +266,53 @@ Requests from the helper (`{"id", "method", "params"}`):
 
 | Method | Needs | Result |
 | --- | --- | --- |
-| `hello` | | `{"app", "version", "protocol": 1, "plugin", "values", "pageSecret"}`: `values` are the row values, `pageSecret` this run's page secret ([Served pages](#served-pages)) |
+| `hello` | | `{"app", "version", "protocol": 1, "plugin", "values"}`: `values` are the row values |
 | `values` | | the row values |
 | `subscribe` `{"events", "idle"?}` | the events in `hooks` | `{"ok": true}`; then `{"event", "time", "data"}` lines as on the socket; `["*"]` means every event in `hooks` |
 | `windows` | `tabs` | as on the socket |
 | `run` `{"command", "arg"?, "window"?, "tab"?}` | `commands` | as on the socket |
-| `page.serve` `{}` | `page.served` | `{"ok": true}`: the helper is ready to answer page requests; open page tabs load. A `url` is `bad_request` |
-| `page.respond` `{"request", "status", "headers"?, "body"?, "more"?}` | `page.served` | `{"ok": true}`: the answer to a page request ([Served pages](#served-pages)) |
-| `page.body` `{"request", "body", "more"?}` | `page.served` | `{"ok": true}`: more of that answer |
+| `page.post` `{"message", "view"?}` | a `page` | `{"ok": true}`: a message to the plugin's page views ([Pages and their helper](#pages-and-their-helper)) |
 | `page.open` `{"path"?, "split"?, "side"?, "context"?}` | a `page`; `context` needs `tabs` | `{"tabId", "windowId"}`: opens the plugin's page at that path in the last focused window, as a tab or in Split View beside the current tab |
 | `tools.call` `{"plugin", "tool", "input"?}` | every permission the other plugin has | the tool's result, or its error; the plugin must be on and running. A plugin can't reach through another plugin's tools to what it wasn't granted itself |
 | `result` `{"call", "result"? , "error"?}` | | `{"ok": true}`: the answer to a call (below) |
 
-A method the manifest doesn't allow is `refused`. Events from Ardia: `plugin.values` (`{"values"}`) when you change a
+A method the manifest doesn't allow is `refused`. Page messages arrive as `{"pageMessage", "view"}`. Events from Ardia: `plugin.values` (`{"values"}`) when you change a
 row, plus the subscribed events. Calls to a tool arrive as `{"call": "c4", "tool": "hello", "input": {…},
 "caller": {"kind": "command" | "cli" | "plugin", "plugin"?}, "deadline": ms}`; the helper answers with `result`. A
 call past its deadline is answered with an error for the caller and `{"call": "c4", "cancel": true}` is sent; a late
 `result` is `bad_request`. At most 16 calls wait per helper.
 
-### Served pages
+### Pages and their helper
 
-A served page's documents and everything they load from their own origin come from the helper over its channel,
-which belongs to that run of the helper and nothing else, so there is no port another process could answer on, no
-proof to make and no cookie to steal.
+A plugin's page and its helper talk through Ardia, never over a port:
 
-- **Requests** arrive as `{"pageRequest": "p7", "method": "GET" | "HEAD", "path": "/chats/7?x=1", "headers": {…}}`.
-  `headers` carries only `accept`, `accept-language`, `range`, `if-none-match` and `if-modified-since`. Other methods
-  never reach the helper (the page gets 405).
-- **Answers:** `page.respond` with the request id, `status` (100 to 599), `headers` (only `content-type`,
-  `cache-control`, `etag`, `last-modified`, `content-language`, `content-range` and `accept-ranges` are kept; Ardia
-  adds `x-content-type-options: nosniff`), and optionally the first `body` chunk (base64, at most 512 KB decoded);
-  `"more": true` keeps it open for `page.body` chunks, which stream to the page as they come. At most 10 MB per
-  answer, 32 requests open at once, and 30 s to the first `page.respond`; past that the page gets 502 and
-  `{"pageCancel": "p7"}` is sent, as it is when the page stops loading something. Answers to a request that isn't open
-  are `bad_request`.
-- **The page's secret.** Each run gets a page secret, 64 hex characters from Ardia, in `hello`'s result, and the page
-  of that run reads the same one as `window.ardia.secret` (set before its scripts run, main frame only). It's for a
-  live connection the page opens to its helper itself (a WebSocket on loopback, with `network`), so each side can
-  prove the other knows it: the helper sends a fresh nonce, the page answers with HMAC-SHA256(secret, `"page:" +
-  nonce`) and sends its own nonce, the helper answers with HMAC-SHA256(secret, `"helper:" + nonce`), and the page
-  sends nothing else until that verifies (`crypto.subtle.verify`, which compares in constant time). A listener
-  that isn't the helper never sees anything it could reuse. A new run of the helper reloads the page with the new
-  secret.
+- **Page to helper.** `window.ardia.send(value)` sends any JSON value; the helper gets a line
+  `{"pageMessage": value, "view": "v3"}`, where `view` names that page tab's view. Only the main frame of the
+  plugin's own `ardia-plugin://<name>/` documents can send. At most 64 KB per message and 100 messages a second per
+  view; more is dropped.
+- **Helper to page.** `page.post {"message": value, "view"?: "v3"}` (at most 256 KB) fires a `message` event on
+  `window.ardia` in that view, or in every view of the plugin when `view` is left out; the value is `event.data`.
+- **Bound to a run.** A view belongs to the plugin, its approval and the run of the helper it was opened for. Messages
+  from a view go only to that run, `page.post` reaches only views of the run that sent it, and anything else is
+  dropped. When the helper restarts, or the plugin is approved again, the page reloads for the new run. While no
+  helper runs, `send` does nothing.
+
+A page with live data (a chat) is static files that bridge through their helper:
+
+```js
+const log = document.querySelector("#log");
+window.ardia.addEventListener("message", (event) => {
+  if (event.data.token) log.textContent += event.data.token;
+});
+window.ardia.addEventListener("context", () => render(window.ardia.context));
+document.querySelector("form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  window.ardia.send({ ask: event.target.question.value, context: window.ardia.context });
+});
+```
+
+and its helper answers each `{"pageMessage": {"ask"}, "view"}` line by streaming `page.post {"view", "message":
+{"token"}}` lines back, holding whatever connection it needs (to the model, to a local runtime) itself.
 
 ## The page
 
@@ -322,13 +323,12 @@ whichever profile the tab's window shows:
   derived from the plugin's name), apart from every profile's cookies, logins and storage, the WebKit page engine's
   stores and other plugins' pages. Removing the plugin deletes it.
 - **Away from Ardia's interface.** It runs in WebKit's own processes with no script message handlers, so the page can't
-  reach the interface's JavaScript, the store or any native call. Ardia only puts `window.ardia` (`context`, `secret`)
-  into the page's main frame. It gets no camera, microphone or location, downloads
+  reach the interface's JavaScript, the store or any native call, with one exception: `window.ardia.send`, in the main
+  frame of the plugin's own documents, which reaches only that plugin's helper, as above. It gets no camera, microphone or location, downloads
   are refused, and its JavaScript dialogs are ignored.
 - **Its network follows the plugin's.** Without `network`, a file page's own requests (scripts, images, `fetch`,
   WebSockets) may only reach its own origin and this Mac, and it can't start workers: Ardia sends a Content Security
-  Policy in every response header. A helper-served page always has `network` (above); Ardia builds every response
-  header it gets, so nothing the helper sends (a `Link` preload, a redirect, a cookie) starts a request.
+  Policy in every response header.
 - **Stays on its origin.** Its own origin may navigate freely; a link you click to any other http(s) address opens
   as a new tab in the window's profile (where your cookies apply, as for any link you open), and every other
   navigation, a pop-up or a `window.open` included, is cancelled.
@@ -353,8 +353,7 @@ the installed app's); `enable`, `disable` and `call` need Ardia running with CLI
 folder, else the one the `ardia` command ships with (`ardia_cli/schemas/`); settings defaults need Ardia's
 `config.schema.json`, and without it a manifest that sets any is refused as unchecked: a version 0 manifest is migrated first and a newer
 version than `plugin.schema.json` knows is refused; then the schema (rows included), the settings defaults against
-`config.schema.json`, and the rules a schema can't state (a command's tool exists, `context` needs `tabs`, a served page
-needs `network`, names are unique, …), with the app's own lists from the schema's `x-ardia-rules` (events that need
+`config.schema.json`, and the rules a schema can't state (a command's tool exists, `context` needs `tabs`, a page is a file, names are unique, …), with the app's own lists from the schema's `x-ardia-rules` (events that need
 `tabs`, page names Ardia keeps, settings with approvals of their own). Only the app knows whether `requires` fits the
 Ardia that runs it. `install` checks the copy it is about to publish again. `tests/fixtures/plugins/rejected-manifests.json`
 is a list both the app's tests and the CLI's tests refuse.

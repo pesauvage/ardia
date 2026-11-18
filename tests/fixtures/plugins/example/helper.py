@@ -88,6 +88,10 @@ for line in reader:
     message = json.loads(line)
     if "call" in message and "tool" in message:
         threading.Thread(target=answer, args=(message,), daemon=True).start()
+    elif "pageMessage" in message:
+        sys.stderr.write("page shows: " + json.dumps(message["pageMessage"].get("shown")) + "\n")
+        sys.stderr.flush()
+        send({"id": "post", "method": "page.post", "params": {"view": message["view"], "message": {"reply": "seen " + str(message["pageMessage"].get("shown"))}}})
     elif "event" in message:
         if message["event"] == "plugin.values":
             values.update(message["data"]["values"])

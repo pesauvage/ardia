@@ -182,12 +182,10 @@ def rule_problems(doc: dict, rules: dict) -> list[str]:
         problems += [f"{where} has two {what} named {v}" for v in duplicates(values)]
     problems += command_problems(commands, rows, tools, page, permissions)
     if page is not None:
-        if ("file" in page) == (page.get("served") is True):
-            problems.append("page needs either file (a file in the plugin's folder) or served: true")
-        if "file" in page and not is_plugin_path(page.get("file")):
+        if "served" in page:
+            problems.append("page.served is gone: a page is static files from the plugin's folder (page.file), and it talks to its helper with window.ardia.send")
+        elif not is_plugin_path(page.get("file")):
             problems.append("page.file must be a path inside the plugin's folder, like page/index.html")
-        if page.get("served") is True and "network" not in permissions:
-            problems.append("page.served needs the network permission: Ardia can't hold a page its helper serves to this Mac")
         if doc.get("name") in rules.get("reservedPageNames", []):
             problems.append(f"name: {doc['name']} is one of Ardia's own pages (ardia://{doc['name']}), so a plugin with a page can't use it")
     if process is not None:
@@ -196,7 +194,7 @@ def rule_problems(doc: dict, rules: dict) -> list[str]:
         if program and not program.startswith("/") and "/" in program and not is_plugin_path(program):
             problems.append("process.run[0] must be a file in the plugin's folder, an absolute path or a program name")
     else:
-        needs = (("tool commands", any("tool" in c for c in commands)), ("tools", bool(tools)), ("hooks", bool(hooks)), ("page.served", bool(page and page.get("served") is True)))
+        needs = (("tool commands", any("tool" in c for c in commands)), ("tools", bool(tools)), ("hooks", bool(hooks)))
         problems += [f"{what} needs a process" for what, used in needs if used]
     untabbed = set(rules.get("untabbedEvents", []))
     problems += [f"hooks[{i}]: {hook} needs the tabs permission" for i, hook in enumerate(hooks) if isinstance(hook, str) and hook not in untabbed and "tabs" not in permissions]

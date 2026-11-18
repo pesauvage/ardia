@@ -124,7 +124,7 @@ test("the helper's channel: hello, values, permissions and hooks", async () => {
   assert.equal((await ask("subscribe", { events: ["window.closed"] }, run)).error.code, "refused");
   assert.deepEqual((await ask("subscribe", { events: ["*"] }, run)).result, { ok: true });
   assert.ok(Array.isArray((await ask("windows", {}, run)).result));
-  assert.equal((await ask("page.serve", { url: "http://127.0.0.1:9/" }, run)).error.code, "refused", "a file page isn't served");
+  assert.equal((await ask("page.serve", {}, run)).error.code, "unknown_method", "pages are never served by a helper");
   assert.equal((await ask("nope", {}, run)).error.code, "unknown_method");
   lifecycle.setPluginValue("example", "greeting", "Hi");
   const sent = host.events.map((e) => JSON.parse(e.line)).filter((e) => e.event === "plugin.values");
@@ -487,23 +487,6 @@ test("two quick restarts start the helper once", async () => {
   lifecycle.disablePlugin("example");
 });
 
-test("a served page loads through Ardia from its helper's channel, never from a port, and its helper gets this run's page secret", async () => {
-  const served = JSON.parse(FIXTURE);
-  served.page = { title: "Served", served: true };
-  served.permissions.push("network");
-  await install(JSON.stringify(served));
-  assert.ok(lifecycle.requestPluginConsent("example") && lifecycle.enablePlugin("example", P().consent.hash));
-  await settle();
-  const { run, pageSecret } = P().processes.example;
-  assert.match(pageSecret, /^[0-9a-f]{64}$/);
-  assert.equal((await ask("hello", {}, run)).result.pageSecret, pageSecret);
-  assert.equal(pageViewUrl(P(), "example", "/chats/7"), null, "nothing loads before the helper is ready");
-  assert.equal((await ask("page.serve", { url: "http://127.0.0.1:4321/" }, run)).error.code, "bad_request", "a port is never trusted with the page");
-  assert.deepEqual((await ask("page.serve", {}, run)).result, { ok: true });
-  assert.equal(pageViewUrl(P(), "example", "/chats/7?x=1"), "ardia-plugin://example/chats/7?x=1");
-  lifecycle.disablePlugin("example");
-  assert.equal(pageViewUrl(P(), "example", "/chats/7"), null);
-});
 test("when plugins.json can't be saved, turning a plugin on or off changes no settings", async () => {
   S().hydrate({});
   startPlugins();

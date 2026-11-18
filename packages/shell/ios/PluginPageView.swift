@@ -4,8 +4,20 @@ import CryptoKit
 import ExpoModulesCore
 import WebKit
 
+final class PluginPageMessageBridge: NSObject, WKScriptMessageHandler {
+  weak var view: PluginPageView?
+
+  init(_ view: PluginPageView) { self.view = view }
+
+  func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+    view?.received(message)
+  }
+}
+
 final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   static var live: [String: PluginPageView] = [:]
+  private static let all = NSHashTable<PluginPageView>.weakObjects()
+  private static var views = 0
 
   let onOpenUrl = EventDispatcher()
   let onLoaded = EventDispatcher()
@@ -14,9 +26,11 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   var url = "" { didSet { if url != oldValue { load() } } }
   var network = false { didSet { if network != oldValue { rebuild() } } }
   var folderId = "" { didSet { if folderId != oldValue { rebuild() } } }
-  var served = false { didSet { if served != oldValue { rebuild() } } }
-  var secret = "" { didSet { if secret != oldValue { rebuild() } } }
+  var approved = "" { didSet { if approved != oldValue { rebuild() } } }
+  var run = 0 { didSet { if run != oldValue { rebuild() } } }
   var context = "" { didSet { if context != oldValue { handOver() } } }
+  let viewId: String
+  private let limit = PluginPageMessages.Limit()
 
   static let offlinePolicy =
     "default-src 'self' ardia-plugin: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ardia-plugin: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; form-action 'self'; worker-src 'none'"
@@ -25,8 +39,11 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private var allowedOrigin: (scheme: String, host: String, port: Int?)?
 
   required init(appContext: AppContext? = nil) {
+    Self.views += 1
+    viewId = "v\(Self.views)"
     super.init(appContext: appContext)
     wantsLayer = true
+    Self.all.add(self)
   }
 
   static func storeIdentifier(_ plugin: String) -> UUID {
@@ -49,7 +66,8 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     let configuration = WKWebViewConfiguration()
     configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: Self.storeIdentifier(plugin))
     configuration.setURLSchemeHandler(
-      PluginSchemeHandler(plugin: plugin, folderId: folderId, served: served, policy: network ? nil : Self.offlinePolicy), forURLScheme: PluginSchemeHandler.scheme)
+      PluginSchemeHandler(plugin: plugin, folderId: folderId, policy: network ? nil : Self.offlinePolicy), forURLScheme: PluginSchemeHandler.scheme)
+    configuration.userContentController.add(PluginPageMessageBridge(self), contentWorld: .page, name: "ardia")
     configuration.userContentController.addUserScript(pageScript())
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
     configuration.mediaTypesRequiringUserActionForPlayback = .all
@@ -92,17 +110,35 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private var contextLiteral: String { context.isEmpty ? "null" : "JSON.parse(\(Self.jsString(context)))" }
 
   private func pageScript() -> WKUserScript {
-    let secretLiteral = secret.isEmpty ? "null" : Self.jsString(secret)
-    let source = "(() => { const ardia = { context: \(contextLiteral), secret: \(secretLiteral) }; Object.defineProperty(window, \"ardia\", { value: ardia, writable: false, configurable: false }); })();"
-    return WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+    let source = """
+      (() => { const port = window.webkit.messageHandlers.ardia; const ardia = new EventTarget(); ardia.context = \(contextLiteral); \
+      ardia.send = (message) => port.postMessage(JSON.stringify(message)); \
+      Object.defineProperty(window, "ardia", { value: ardia, writable: false, configurable: false }); })();
+      """
+    return WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page)
   }
 
   private func handOver() {
     guard let web else { return }
     web.configuration.userContentController.removeAllUserScripts()
     web.configuration.userContentController.addUserScript(pageScript())
-    let update = "if (window.ardia) { window.ardia.context = \(contextLiteral); window.dispatchEvent(new CustomEvent(\"ardiacontext\", { detail: window.ardia.context })); }"
+    let update = "if (window.ardia) { window.ardia.context = \(contextLiteral); window.ardia.dispatchEvent(new Event(\"context\")); }"
     web.evaluateJavaScript(update, completionHandler: nil)
+  }
+
+  func received(_ message: WKScriptMessage) {
+    let origin = message.frameInfo.securityOrigin
+    guard message.frameInfo.isMainFrame, origin.protocol == PluginSchemeHandler.scheme, origin.host == plugin, run > 0, !approved.isEmpty,
+      limit.allow(now: ProcessInfo.processInfo.systemUptime)
+    else { return }
+    PluginHost.shared.pageMessage(plugin, run: run, approved: approved, view: viewId, body: message.body)
+  }
+
+  static func deliver(_ post: PagePost, plugin: String, run: Int, approved: String) {
+    for view in all.allObjects where view.plugin == plugin && view.run == run && view.approved == approved && (post.view == nil || post.view == view.viewId) {
+      let script = "if (window.ardia) window.ardia.dispatchEvent(new MessageEvent(\"message\", { data: JSON.parse(\(jsString(post.json))) }));"
+      view.web?.evaluateJavaScript(script, completionHandler: nil)
+    }
   }
 
   private func load() {

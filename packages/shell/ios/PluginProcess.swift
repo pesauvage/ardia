@@ -20,7 +20,8 @@ final class PluginProcess: PluginRun {
   private var reaped = false
   private var familyTimer: DispatchSourceTimer?
   private var overMemory = false
-  let pageRelay = PluginPageRelay()
+  let approved: String
+  var onPagePost: ((PluginProcess, PagePost) -> Void)?
   private var family: Set<PluginProcessMember> = []
   private var log: Int32
 
@@ -42,7 +43,8 @@ final class PluginProcess: PluginRun {
     }
   }
 
-  private init(name: String, run: Int, pid: pid_t, queue: DispatchQueue, memoryLimit: UInt64, log: Int32) {
+  private init(name: String, run: Int, pid: pid_t, queue: DispatchQueue, memoryLimit: UInt64, log: Int32, approved: String) {
+    self.approved = approved
     self.log = log
     self.name = name
     self.run = run
@@ -146,7 +148,7 @@ final class PluginProcess: PluginRun {
       return .failure(.refused("it couldn't start (\(errnoText(result)))"))
     }
     let limit = UInt64(max(64, spec.memoryMB)) << 20
-    let process = PluginProcess(name: spec.name, run: run, pid: pid, queue: queue, memoryLimit: limit, log: log)
+    let process = PluginProcess(name: spec.name, run: run, pid: pid, queue: queue, memoryLimit: limit, log: log, approved: spec.approved)
     process.watch(channel: pair[0], onLine: onLine, onExit: onExit)
     return .success(process)
   }
@@ -188,13 +190,19 @@ final class PluginProcess: PluginRun {
   }
 
   private func answeredPageLine(_ line: String) -> Bool {
-    guard line.contains("\"page.respond\"") || line.contains("\"page.body\""), let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-      let method = object["method"] as? String, method == "page.respond" || method == "page.body"
+    guard line.contains("\"page.post\""), let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+      object["method"] as? String == "page.post"
     else { return false }
-    let problem = pageRelay.handle(method: method, params: object["params"] as? [String: Any] ?? [:])
-    var reply: [String: Any] = problem.map { ["error": ["code": "bad_request", "message": $0]] } ?? ["result": ["ok": true]]
+    var reply: [String: Any]
+    switch PluginPageMessages.toPage(object["params"] as? [String: Any] ?? [:]) {
+    case .success(let post):
+      onPagePost?(self, post)
+      reply = ["result": ["ok": true]]
+    case .failure(let refusal):
+      reply = ["error": ["code": "bad_request", "message": refusal.reason]]
+    }
     if let id = object["id"] { reply["id"] = id }
-    connection?.reply(PluginPageRelay.line(reply), ticket: 0)
+    connection?.reply(PluginPageMessages.line(reply), ticket: 0)
     return true
   }
 
@@ -243,7 +251,6 @@ final class PluginProcess: PluginRun {
   }
 
   private func cleanUp() {
-    pageRelay.failAll("its program stopped")
     exitSource?.cancel()
     exitSource = nil
     memoryTimer?.cancel()

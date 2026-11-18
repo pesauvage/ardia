@@ -57,7 +57,7 @@ async function launch(name: string, entry: Supervised) {
   if (started.ok) highestRun = Math.max(highestRun, started.run);
   if (!started.ok) return setProcess(name, { state: "failed", reason: started.reason });
   notePlugin("plugin_process_starts");
-  setProcess(name, { state: "running", run: started.run, since: Date.now(), pageSecret: started.pageSecret });
+  setProcess(name, { state: "running", run: started.run, since: Date.now() });
 }
 
 export function superviseProcess(name: string, hash: string, manifest: PluginManifest, folderId: string) {

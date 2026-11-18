@@ -58,23 +58,21 @@ test("every problem is reported at once, with its path", () => {
   assert.ok(found.includes("plugin.json: settings.rows[2].default must be one of its choices' values"));
 });
 
-test("tool commands, tools, hooks and a served page need a process; page commands don't", () => {
+test("tool commands, tools and hooks need a process; page commands don't", () => {
   const doc = base();
   delete doc.process;
-  doc.page = { title: "Served", served: true };
   const found = problems(doc);
-  for (const what of ["tool commands", "tools", "hooks", "page.served"]) assert.ok(found.includes(`plugin.json: ${what} needs a process`), what);
+  for (const what of ["tool commands", "tools", "hooks"]) assert.ok(found.includes(`plugin.json: ${what} needs a process`), what);
   const pageOnly = { name: "reader", page: { title: "Reader", file: "index.html" }, commands: [{ name: "open", title: "Open Reader", open: "tab" }] };
   assert.deepEqual(problems(pageOnly), []);
 });
 
-test("a served page needs the network permission, since Ardia can't hold it to this Mac", () => {
+test("a page is static files: a served page is refused, with or without network", () => {
   const doc = base();
   doc.page = { title: "Served", served: true };
-  doc.permissions = doc.permissions.filter((p) => p !== "network");
-  assert.ok(problems(doc).some((p) => p.startsWith("plugin.json: page.served needs the network permission")));
+  assert.ok(problems(doc).some((p) => p.startsWith("plugin.json: page.served is gone")));
   doc.permissions.push("network");
-  assert.deepEqual(problems(doc), []);
+  assert.ok(problems(doc).some((p) => p.startsWith("plugin.json: page.served is gone")));
 });
 
 test("a page command checks its context, side and the row that picks the side", () => {

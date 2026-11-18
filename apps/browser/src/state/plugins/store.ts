@@ -10,7 +10,7 @@ export type PluginListing = {
 };
 
 export type ProcessState =
-  | { state: "starting" | "running"; run: number; since: number; pageSecret?: string }
+  | { state: "starting" | "running"; run: number; since: number }
   | { state: "waiting"; until: number; failures: number }
   | { state: "crashed"; reason: string }
   | { state: "exited" }
@@ -29,7 +29,6 @@ export type PluginsStore = {
   order: string[];
   records: Record<string, PluginRecord>;
   processes: Record<string, ProcessState>;
-  pageReady: Record<string, number>;
   consent: { name: string; hash: string } | null;
 };
 
@@ -39,7 +38,6 @@ export const usePlugins = create<PluginsStore>()(() => ({
   order: [],
   records: {},
   processes: {},
-  pageReady: {},
   consent: null,
 }));
 

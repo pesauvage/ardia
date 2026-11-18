@@ -54,7 +54,7 @@ export type CommandAction =
   | { open: "tab" | "split"; context: boolean; side: PageSide; sideSetting: string | null; path: string };
 export type CommandSpec = { name: string; title: string; icon: string; keywords: string[]; action: CommandAction };
 export type ToolSpec = { name: string; title: string; description: string; timeout: number };
-export type PageSpec = { title: string; icon: string; source: { file: string } | { served: true } };
+export type PageSpec = { title: string; icon: string; source: { file: string } };
 export type ProcessSpec = { run: string[]; memoryMB: number };
 
 export type PluginManifest = {
@@ -250,18 +250,16 @@ function pageOf(c: Check, value: unknown): PageSpec | null {
   only(c, "page", doc, ["title", "icon", "file", "served"]);
   const title = text(c, "page.title", doc.title, LIMITS.pageTitle);
   const icon = matching(c, "page.icon", doc.icon, SYMBOL, "an SF Symbol name", false) ?? "puzzlepiece";
-  const hasFile = doc.file !== undefined;
-  if (hasFile === (doc.served === true)) {
-    c.problems.push("page needs either file (a file in the plugin's folder) or served: true");
+  if (doc.served !== undefined) {
+    c.problems.push("page.served is gone: a page is static files from the plugin's folder (page.file), and it talks to its helper with window.ardia.send");
     return null;
   }
-  if (doc.served !== undefined && doc.served !== true) c.problems.push("page.served must be true");
-  if (hasFile && (typeof doc.file !== "string" || !isPluginPath(doc.file))) {
+  if (typeof doc.file !== "string" || !isPluginPath(doc.file)) {
     c.problems.push("page.file must be a path inside the plugin's folder, like page/index.html");
     return null;
   }
   if (!title) return null;
-  return { title, icon, source: hasFile ? { file: doc.file as string } : { served: true } };
+  return { title, icon, source: { file: doc.file as string } };
 }
 
 function processOf(c: Check, value: unknown): ProcessSpec | null {
@@ -329,10 +327,8 @@ export function checkManifest(raw: Fields): { manifest: PluginManifest | null; p
       c.problems.push(`commands[${i}].sideSetting must name a choice row whose values are left, right, top or bottom`);
   });
   if (page && name && RESERVED_PAGE_NAMES.includes(name)) c.problems.push(`name: ${name} is one of Ardia's own pages (ardia://${name}), so a plugin with a page can't use it`);
-  const served = !!page && "served" in page.source;
-  const needsProcess: [string, boolean][] = [["tool commands", commands.some((x) => "tool" in x.action)], ["tools", tools.length > 0], ["hooks", hooks.length > 0], ["page.served", served]];
+  const needsProcess: [string, boolean][] = [["tool commands", commands.some((x) => "tool" in x.action)], ["tools", tools.length > 0], ["hooks", hooks.length > 0]];
   for (const [what, used] of needsProcess) if (used && !process) c.problems.push(`${what} needs a process`);
-  if (served && !permissions.includes("network")) c.problems.push("page.served needs the network permission: Ardia can't hold a page its helper serves to this Mac");
   if (c.problems.length || !name || !title) return { manifest: null, problems: c.problems };
   return {
     manifest: { manifest: MANIFEST_VERSION, name, title, description, version, requires, permissions, settings, commands, page, process, hooks, tools },

@@ -22,11 +22,11 @@ export function usePluginPageContext(tabId: string, name: string): string {
 }
 export const usePluginPageUrl = (name: string, path: string) => usePlugins((s) => pageViewUrl(s, name, path));
 export const usePluginFolderId = (name: string) => usePlugins((s) => s.listings[name]?.folderId ?? "");
-export const usePluginPageSecret = (name: string) =>
+export const usePluginPageRun = (name: string) =>
   usePlugins((s) => {
-    const state = s.processes[name];
-    return state?.state === "running" ? (state.pageSecret ?? "") : "";
+    const state = Object.hasOwn(s.processes, name) ? s.processes[name] : undefined;
+    return state?.state === "running" ? state.run : 0;
   });
-export const usePluginPageServed = (name: string) => usePlugins((s) => { const source = s.listings[name]?.manifest?.page?.source; return !!source && "served" in source; });
+export const usePluginApproval = (name: string) => usePlugins((s) => recordOf(s, name).approved ?? "");
 export const usePluginNetwork = (name: string) => usePlugins((s) => !!activeManifest(s, name)?.permissions.includes("network"));
 export const usePluginPageSpec = (name: string) => usePlugins((s) => s.listings[name]?.manifest?.page ?? null);

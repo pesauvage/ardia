@@ -55,16 +55,6 @@ export function reconcilePlugins() {
     else stopProcess(name);
   }
   for (const name of supervisedNames()) if (!active.has(name)) stopProcess(name);
-  for (const name of Object.keys(s.pageReady)) if (!active.has(name)) withdraw(name);
-}
-
-function withdraw(name: string) {
-  dropCalls(name);
-  usePlugins.setState((s) => {
-    const pageReady = { ...s.pageReady };
-    delete pageReady[name];
-    return { pageReady };
-  });
 }
 
 export function applyListings(listings: PluginListing[]) {

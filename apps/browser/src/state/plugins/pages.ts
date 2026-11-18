@@ -61,10 +61,9 @@ function withParam(url: string, key: string, value: string): string {
   return `${head}${head.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(value)}${fragment}`;
 }
 
-export function pageViewUrl(s: Pick<PluginsStore, "listings" | "records" | "pageReady">, name: string, path = ""): string | null {
+export function pageViewUrl(s: Pick<PluginsStore, "listings" | "records">, name: string, path = ""): string | null {
   const page = activeManifest(s, name)?.page;
   if (!page || !isPagePath(path)) return null;
-  if ("served" in page.source) return s.pageReady[name] ? `ardia-plugin://${name}${path.startsWith("/") ? path : `/${path}`}` : null;
   const file = `ardia-plugin://${name}/${page.source.file.split("/").map(encodeURIComponent).join("/")}`;
   return path ? withParam(file, "ardiaPath", path) : file;
 }

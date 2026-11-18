@@ -45,8 +45,8 @@ public class PluginsModule: Module {
       Prop("url") { (view: PluginPageView, value: String) in view.url = value }
       Prop("network") { (view: PluginPageView, value: Bool) in view.network = value }
       Prop("folderId") { (view: PluginPageView, value: String) in view.folderId = value }
-      Prop("served") { (view: PluginPageView, value: Bool) in view.served = value }
-      Prop("secret") { (view: PluginPageView, value: String) in view.secret = value }
+      Prop("approved") { (view: PluginPageView, value: String) in view.approved = value }
+      Prop("run") { (view: PluginPageView, value: Int) in view.run = value }
       Prop("context") { (view: PluginPageView, value: String) in view.context = value }
     }
 

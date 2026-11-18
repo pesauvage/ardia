@@ -2,7 +2,7 @@ import { StyleSheet, View } from "react-native";
 import { Box, Button, PluginPageView, Text } from "../ui";
 import { useTheme } from "../ui/theme";
 import { useTab } from "../../state/browser/hooks";
-import { usePluginActive, usePluginFolderId, usePluginNetwork, usePluginPageContext, usePluginPageSecret, usePluginPageServed, usePluginPageSpec, usePluginPageUrl, usePluginProcess } from "../../state/plugins/hooks";
+import { usePluginActive, usePluginFolderId, usePluginNetwork, usePluginPageContext, usePluginApproval, usePluginPageRun, usePluginPageSpec, usePluginPageUrl, usePluginProcess } from "../../state/plugins/hooks";
 import { openPageLink, pluginPagePath } from "../../state/plugins/actions";
 import { openSettings } from "../../state/settings/settingsWindows";
 
@@ -29,8 +29,8 @@ export function PluginPage({ tabId, name }: { tabId: string; name: string }) {
   const process = usePluginProcess(name);
   const network = usePluginNetwork(name);
   const folderId = usePluginFolderId(name);
-  const secret = usePluginPageSecret(name);
-  const served = usePluginPageServed(name);
+  const run = usePluginPageRun(name);
+  const approved = usePluginApproval(name);
   if (!spec || !active) return <Notice name={name} title={`${spec?.title ?? name} is off`} detail="Turn the plugin on in Settings › Plugins to use its page." />;
   if (!url) {
     const failed = process?.state === "crashed" || process?.state === "failed";
@@ -38,7 +38,7 @@ export function PluginPage({ tabId, name }: { tabId: string; name: string }) {
   }
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.card }]}>
-      <PluginPageView style={StyleSheet.absoluteFill} plugin={name} url={url} network={network} folderId={folderId} served={served} secret={secret} context={context} onOpenUrl={(e) => openPageLink(windowId, e.nativeEvent.url)} />
+      <PluginPageView style={StyleSheet.absoluteFill} plugin={name} url={url} network={network} folderId={folderId} approved={approved} run={run} context={context} onOpenUrl={(e) => openPageLink(windowId, e.nativeEvent.url)} />
     </View>
   );
 }

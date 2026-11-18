@@ -57,18 +57,6 @@ function subscribe(c: Connection, m: PluginManifest, params: Record<string, unkn
   return { result: { ok: true } };
 }
 
-function pageSecretOf(name: string, run: number): string {
-  const state = usePlugins.getState().processes[name];
-  return state?.state === "running" && state.run === run ? (state.pageSecret ?? "") : "";
-}
-
-function servePage(name: string, run: number, m: PluginManifest, params: Record<string, unknown>): Body {
-  if (!m.page || !("served" in m.page.source)) return failure("refused", "This plugin's page isn't served by its helper.");
-  if (params.url !== undefined) return failure("bad_request", "page.serve takes no URL: Ardia asks the helper for each page request on this channel (pageRequest), and the page is never loaded from a port.");
-  usePlugins.setState((s) => ({ pageReady: { ...s.pageReady, [name]: run } }));
-  return { result: { ok: true } };
-}
-
 function openPage(name: string, m: PluginManifest, params: Record<string, unknown>): Body {
   if (!m.page) return failure("refused", "This plugin has no page.");
   const { path, split, side, context } = params;
@@ -94,7 +82,7 @@ async function toolsCall(name: string, m: PluginManifest, params: Record<string,
 function answer(c: Connection, m: PluginManifest, method: string, params: Record<string, unknown>): Body | Promise<Body> {
   switch (method) {
     case "hello":
-      return { result: { app: "Ardia", version: systemInfo().appVersion, protocol: CHANNEL_PROTOCOL, plugin: c.name, values: valuesFor(c.name), pageSecret: pageSecretOf(c.name, c.run) } };
+      return { result: { app: "Ardia", version: systemInfo().appVersion, protocol: CHANNEL_PROTOCOL, plugin: c.name, values: valuesFor(c.name) } };
     case "values":
       return { result: valuesFor(c.name) };
     case "subscribe":
@@ -103,8 +91,6 @@ function answer(c: Connection, m: PluginManifest, method: string, params: Record
       return has(m, "tabs") ? { result: minimizedWindows(has(m, "fullUrls")) } : failure("refused", "windows needs the tabs permission.");
     case "run":
       return has(m, "commands") ? runMethod(params) : failure("refused", "run needs the commands permission.");
-    case "page.serve":
-      return servePage(c.name, c.run, m, params);
     case "page.open":
       return openPage(c.name, m, params);
     case "tools.call":
@@ -157,12 +143,6 @@ function deliver(name: AutomationEventName, data: Record<string, unknown>, time:
 }
 
 export function dropConnections(name: string) {
-  if (currentPlugins().pageReady[name] !== undefined)
-    usePlugins.setState((s) => {
-      const pageReady = { ...s.pageReady };
-      delete pageReady[name];
-      return { pageReady };
-    });
   let changed = false;
   for (const [k, c] of connections) {
     if (c.name !== name) continue;
