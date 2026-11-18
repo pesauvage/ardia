@@ -18,11 +18,10 @@ final class PluginProcess: PluginRun {
   private var stopWaiters: [() -> Void] = []
   private(set) var exited = false
   private var reaped = false
-  private var familyTimer: DispatchSourceTimer?
   private var overMemory = false
   let approved: String
   var onPagePost: ((PluginProcess, PagePost) -> Void)?
-  private var family: Set<PluginProcessMember> = []
+  private var family: PluginFamily?
   private var log: Int32
 
   struct Spec {
@@ -178,14 +177,9 @@ final class PluginProcess: PluginRun {
     timer.setEventHandler { [weak self] in self?.checkMemory() }
     memoryTimer = timer
     timer.activate()
-    let sampler = DispatchSource.makeTimerSource(queue: queue)
-    sampler.schedule(deadline: .now() + Self.familySampleInterval, repeating: Self.familySampleInterval)
-    sampler.setEventHandler { [weak self] in
-      guard let self, !self.exited else { return }
-      self.rememberFamily()
-    }
-    familyTimer = sampler
-    sampler.activate()
+    let family = PluginFamily(root: pid, queue: queue, interval: Self.familySampleInterval)
+    family.start()
+    self.family = family
     queue.async { [weak self] in self?.reapIfGone(onExit) }
   }
 
@@ -210,13 +204,7 @@ final class PluginProcess: PluginRun {
     reap(onExit)
   }
 
-  private func hasExited() -> Bool? {
-    var info = siginfo_t()
-    var got = waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT)
-    while got < 0 && errno == EINTR { got = waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT) }
-    if got < 0 { return nil }
-    return info.si_pid == pid
-  }
+  private func hasExited() -> Bool? { reaped ? nil : PluginProcessTree.ownership(pid) }
 
   private func reap(_ onExit: @escaping (PluginProcess, Int32?, Int32?, Bool) -> Void) {
     guard !reaped else { return }
@@ -240,14 +228,8 @@ final class PluginProcess: PluginRun {
     onExit(self, signaled ? nil : (status >> 8) & 0xff, signaled ? status & 0x7f : nil, overMemory)
   }
 
-  private func rememberFamily() {
-    family = PluginProcessTree.alive(family).union(PluginProcessTree.family(of: pid))
-  }
-
   private func signalFamily(_ signal: Int32) {
-    if !exited { rememberFamily() }
-    if !reaped { kill(-pid, signal) }
-    PluginProcessTree.signal(family, signal)
+    family?.signal(signal, group: hasExited() != nil)
   }
 
   private func cleanUp() {
@@ -255,8 +237,7 @@ final class PluginProcess: PluginRun {
     exitSource = nil
     memoryTimer?.cancel()
     memoryTimer = nil
-    familyTimer?.cancel()
-    familyTimer = nil
+    family?.cancel()
     killTimer?.cancel()
     killTimer = nil
     connection?.close()
@@ -290,6 +271,7 @@ final class PluginProcess: PluginRun {
   func stop(graceMs: Int, done: @escaping () -> Void) {
     guard !exited else { return done() }
     stopWaiters.append(done)
+    family?.sample()
     connection?.close()
     signalFamily(SIGTERM)
     guard killTimer == nil else { return }
@@ -308,6 +290,7 @@ final class PluginProcess: PluginRun {
 
   func terminateForQuit(within seconds: TimeInterval) {
     guard !exited else { return }
+    family?.sample()
     connection?.close()
     signalFamily(SIGTERM)
     let deadline = Date().addingTimeInterval(seconds)

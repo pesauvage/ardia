@@ -59,11 +59,92 @@ enum PluginProcessTree {
     return Set(entries.filter { pids.contains($0.pid) && !excluded.contains($0.pid) }.map { PluginProcessMember(pid: $0.pid, started: $0.started) })
   }
 
+  static func ownership(_ pid: pid_t) -> Bool? {
+    var info = siginfo_t()
+    var got = waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT)
+    while got < 0 && errno == EINTR { got = waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT) }
+    if got < 0 { return nil }
+    return info.si_pid == pid
+  }
+
+  static func withDescendants(_ members: Set<PluginProcessMember>) -> Set<PluginProcessMember> {
+    let entries = table()
+    let excluded: Set<pid_t> = [0, 1, getpid()]
+    var pids = Set(members.map(\.pid))
+    var grew = true
+    while grew {
+      grew = false
+      for e in entries where !pids.contains(e.pid) && !excluded.contains(e.pid) && (pids.contains(e.ppid) || pids.contains(e.pgid)) {
+        pids.insert(e.pid)
+        grew = true
+      }
+    }
+    let known = Dictionary(members.map { ($0.pid, $0) }, uniquingKeysWith: { a, _ in a })
+    return Set(entries.filter { pids.contains($0.pid) && !excluded.contains($0.pid) }.map { known[$0.pid] ?? PluginProcessMember(pid: $0.pid, started: $0.started) })
+  }
+
   static func alive(_ members: Set<PluginProcessMember>) -> Set<PluginProcessMember> {
     members.filter { entry($0.pid)?.started == $0.started }
   }
 
   static func signal(_ members: Set<PluginProcessMember>, _ signal: Int32) {
     for member in members where entry(member.pid)?.started == member.started { kill(member.pid, signal) }
+  }
+}
+
+final class PluginFamily {
+  let root: pid_t
+  private(set) var members: Set<PluginProcessMember> = []
+  private let queue: DispatchQueue
+  private let interval: TimeInterval
+  private var forks: DispatchSourceProcess?
+  private var timer: DispatchSourceTimer?
+  private var samplePending = false
+
+  init(root: pid_t, queue: DispatchQueue, interval: TimeInterval = 1) {
+    self.root = root
+    self.queue = queue
+    self.interval = interval
+  }
+
+  func start() {
+    let forks = DispatchSource.makeProcessSource(identifier: root, eventMask: .fork, queue: queue)
+    forks.setEventHandler { [weak self] in self?.requestSample() }
+    forks.activate()
+    self.forks = forks
+    let timer = DispatchSource.makeTimerSource(queue: queue)
+    timer.schedule(deadline: .now() + interval, repeating: interval)
+    timer.setEventHandler { [weak self] in self?.sample() }
+    timer.activate()
+    self.timer = timer
+    sample()
+  }
+
+  private func requestSample() {
+    guard !samplePending else { return }
+    samplePending = true
+    queue.async { [weak self] in
+      guard let self else { return }
+      self.samplePending = false
+      self.sample()
+    }
+  }
+
+  func sample() {
+    members = PluginProcessTree.alive(members).union(PluginProcessTree.family(of: root))
+  }
+
+  func signal(_ signal: Int32, group: Bool) {
+    sample()
+    members = PluginProcessTree.withDescendants(PluginProcessTree.alive(members))
+    if group { kill(-root, signal) }
+    PluginProcessTree.signal(members, signal)
+  }
+
+  func cancel() {
+    forks?.cancel()
+    forks = nil
+    timer?.cancel()
+    timer = nil
   }
 }

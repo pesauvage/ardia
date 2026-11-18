@@ -128,3 +128,81 @@ final class PluginResponsibilityTests: XCTestCase {
     }
   }
 }
+
+final class PluginFamilyTests: XCTestCase {
+  func spawnDisclaimed(_ script: String, _ argument: String) throws -> pid_t {
+    var attributes: posix_spawnattr_t?
+    posix_spawnattr_init(&attributes)
+    defer { posix_spawnattr_destroy(&attributes) }
+    posix_spawnattr_setpgroup(&attributes, 0)
+    posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP))
+    _ = PluginProcessTree.disclaim(&attributes)
+    var pid: pid_t = 0
+    let argv = ["/usr/bin/python3", "-c", script, argument].map { strdup($0) } + [nil]
+    defer { argv.forEach { free($0) } }
+    XCTAssertEqual(posix_spawn(&pid, "/usr/bin/python3", nil, &attributes, argv, environ), 0)
+    return pid
+  }
+
+  func readPids(_ path: String, count: Int) -> [pid_t] {
+    let deadline = Date().addingTimeInterval(10)
+    var pids: [pid_t] = []
+    while pids.count < count && Date() < deadline {
+      pids = ((try? String(contentsOfFile: path, encoding: .utf8)) ?? "").split(separator: " ").compactMap { pid_t($0) }
+      usleep(20_000)
+    }
+    return pids
+  }
+
+  func testAChildDetachedJustBeforeTheHelperExitsIsStillEnded() throws {
+    let marker = FileManager.default.temporaryDirectory.appendingPathComponent("family-\(UUID().uuidString)").path
+    let script = "import subprocess, sys, time\nchild = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'], start_new_session=True)\nopen(sys.argv[1], 'w').write(str(child.pid))\ntime.sleep(0.1)"
+    let queue = DispatchQueue(label: "family-test")
+    let helper = try spawnDisclaimed(script, marker)
+    let family = PluginFamily(root: helper, queue: queue, interval: 60)
+    queue.sync { family.start() }
+    waitpid(helper, nil, 0)
+    let child = try XCTUnwrap(readPids(marker, count: 1).first)
+    defer { kill(child, SIGKILL) }
+    XCTAssertEqual(PluginProcessTree.entry(child)?.ppid, 1, "orphaned when the helper exited, well before the next timed sample")
+    queue.sync {
+      family.signal(SIGKILL, group: false)
+      family.cancel()
+    }
+    let gone = Date().addingTimeInterval(3)
+    while kill(child, 0) == 0 && Date() < gone { usleep(20_000) }
+    XCTAssertNotEqual(kill(child, 0), 0, "the fork was noticed and sampled while the helper still ran")
+  }
+
+  func testDescendantsASampledChildStartsLaterAreEndedToo() throws {
+    let marker = FileManager.default.temporaryDirectory.appendingPathComponent("family-\(UUID().uuidString)").path
+    let script = "import os, subprocess, sys, time\nchild = subprocess.Popen([sys.executable, '-c', 'import subprocess, sys, time\\ntime.sleep(0.5)\\ng = subprocess.Popen([sys.executable, \"-c\", \"import time; time.sleep(60)\"])\\nopen(sys.argv[1], \"a\").write(\" \" + str(g.pid))\\ntime.sleep(60)', sys.argv[1]], start_new_session=True)\nopen(sys.argv[1], 'w').write(str(child.pid))\ntime.sleep(0.1)"
+    let queue = DispatchQueue(label: "family-test")
+    let helper = try spawnDisclaimed(script, marker)
+    let family = PluginFamily(root: helper, queue: queue, interval: 60)
+    queue.sync { family.start() }
+    waitpid(helper, nil, 0)
+    let pids = readPids(marker, count: 2)
+    XCTAssertEqual(pids.count, 2, "the child and the grandchild it started after the helper was gone")
+    defer { pids.forEach { kill($0, SIGKILL) } }
+    queue.sync {
+      family.signal(SIGKILL, group: false)
+      family.cancel()
+    }
+    for pid in pids {
+      let gone = Date().addingTimeInterval(3)
+      while kill(pid, 0) == 0 && Date() < gone { usleep(20_000) }
+      XCTAssertNotEqual(kill(pid, 0), 0)
+    }
+  }
+
+  func testOnlyOurOwnChildIsEverTreatedAsOwned() throws {
+    XCTAssertNil(PluginProcessTree.ownership(1), "launchd isn't ours: no group signal")
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+    process.arguments = ["30"]
+    try process.run()
+    defer { process.terminate() }
+    XCTAssertEqual(PluginProcessTree.ownership(process.processIdentifier), false, "a running child of ours")
+  }
+}
