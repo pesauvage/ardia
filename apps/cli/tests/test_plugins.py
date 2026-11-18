@@ -289,6 +289,19 @@ class PluginsCliTest(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("can't be sent as UTF-8", err)
 
+    def test_a_page_command_path_that_almost_matches_is_refused_at_once(self):
+        import time
+        source = self.data / "slow"
+        shutil.copytree(EXAMPLE, source)
+        manifest = json.loads((source / "plugin.json").read_text())
+        opener = next(c for c in manifest["commands"] if "open" in c)
+        opener["path"] = "/" * 34 + "#"
+        (source / "plugin.json").write_text(json.dumps(manifest))
+        started = time.monotonic()
+        status, _, _ = self.ardia("check", str(source))
+        self.assertEqual(status, 1)
+        self.assertLess(time.monotonic() - started, 2, "the path pattern has no nested repetition to backtrack through")
+
 
 if __name__ == "__main__":
     unittest.main()

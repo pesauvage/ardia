@@ -183,7 +183,7 @@
           },
           "path": {
             "type": "string",
-            "pattern": "^(/[^?#\\s]*)*(\\?[^#\\s]*)?$",
+            "pattern": "^(/[^?#\\s]*)?(\\?[^#\\s]*)?$",
             "description": "Where in the plugin's page to open, like /history"
           }
         },
