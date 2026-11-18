@@ -209,6 +209,17 @@ class PluginsCliTest(unittest.TestCase):
         self.assertFalse((target / "old-marker").exists())
         self.assertEqual(sorted(p.name for p in target.parent.iterdir()), ["example"])
 
+    def test_a_path_with_a_lone_surrogate_is_a_problem_not_a_crash(self):
+        for patch in ({"page": {"title": "P", "file": "page/a\ud800.html"}}, {"process": {"run": ["bin/\udc00helper"]}}):
+            manifest = json.loads((EXAMPLE / "plugin.json").read_text())
+            manifest.update(patch)
+            folder = self.data / "surrogate" / str(len(list(self.data.glob("surrogate/*"))))
+            folder.mkdir(parents=True)
+            (folder / "plugin.json").write_text(json.dumps(manifest))
+            status, out, err = self.ardia("check", str(folder) + "/")
+            self.assertEqual(status, 1, out + err)
+            self.assertNotIn("Traceback", err)
+
     def test_list_and_remove_work_from_the_files_when_ardia_is_away(self):
         self.ardia("install", str(EXAMPLE))
         status, out, _ = self.ardia("list", "--json")

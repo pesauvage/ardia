@@ -98,8 +98,16 @@ def current_manifest(manifest: dict, known: int):
     return doc, []
 
 
+def well_formed(value: str) -> bool:
+    try:
+        value.encode("utf-8")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
 def is_plugin_path(value) -> bool:
-    if not isinstance(value, str) or not value or len(value.encode()) > 1024 or value.startswith("/") or "\\" in value or "\0" in value:
+    if not isinstance(value, str) or not value or not well_formed(value) or len(value.encode()) > 1024 or value.startswith("/") or "\\" in value or "\0" in value:
         return False
     return all(part not in ("", ".", "..") for part in value.split("/"))
 
@@ -190,6 +198,8 @@ def rule_problems(doc: dict, rules: dict) -> list[str]:
             problems.append(f"name: {doc['name']} is one of Ardia's own pages (ardia://{doc['name']}), so a plugin with a page can't use it")
     if process is not None:
         run = process.get("run")
+        if isinstance(run, list) and any(isinstance(arg, str) and not well_formed(arg) for arg in run):
+            problems.append("process.run has an argument that isn't well-formed Unicode")
         program = run[0] if isinstance(run, list) and run and isinstance(run[0], str) else None
         if program and not program.startswith("/") and "/" in program and not is_plugin_path(program):
             problems.append("process.run[0] must be a file in the plugin's folder, an absolute path or a program name")

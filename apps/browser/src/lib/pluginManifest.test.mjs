@@ -155,3 +155,11 @@ test("the manifest example in docs/plugins.md reads without problems", () => {
   const start = doc.indexOf("```json") + "```json".length;
   assert.deepEqual(readManifest(doc.slice(start, doc.indexOf("```", start))).problems, []);
 });
+
+test("a path with a lone surrogate is a manifest problem, not a crash", () => {
+  for (const patch of [{ page: { title: "P", file: "page/a\ud800.html" } }, { process: { run: ["bin/\udc00helper"] } }, { commands: [{ name: "h", title: "H", open: "tab", path: "/x\ud800" }] }]) {
+    let found;
+    assert.doesNotThrow(() => (found = problems({ ...base(), ...patch })), JSON.stringify(patch));
+    assert.ok(found.length > 0, JSON.stringify(patch));
+  }
+});

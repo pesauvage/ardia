@@ -16,4 +16,16 @@ export const RESERVED_PAGE_NAMES: readonly string[] = [
 const PAGE_PATH = /^(\/[A-Za-z0-9._~!$&'()*+,;=:@%-]*)*(\?[^#\s]*)?$/;
 export const MAX_PAGE_PATH = 512;
 
-export const isPagePath = (path: string) => path.length <= MAX_PAGE_PATH && (path === "" || PAGE_PATH.test(path)) && !path.split(/[/?]/).some((part) => part === "..");
+export function isWellFormed(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = text.charCodeAt(i + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      i++;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) return false;
+  }
+  return true;
+}
+
+export const isPagePath = (path: string) => path.length <= MAX_PAGE_PATH && isWellFormed(path) && (path === "" || PAGE_PATH.test(path)) && !path.split(/[/?]/).some((part) => part === "..");

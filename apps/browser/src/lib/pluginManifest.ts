@@ -1,6 +1,6 @@
 import { isFields, type Fields } from "./decode";
 import { upgraded, type Migrations } from "./savedDocument";
-import { isPagePath, RESERVED_PAGE_NAMES } from "./pluginNames";
+import { isPagePath, isWellFormed, RESERVED_PAGE_NAMES } from "./pluginNames";
 
 export { compareVersions } from "./versions";
 
@@ -239,7 +239,7 @@ function tool(c: Check, path: string, value: unknown): ToolSpec | null {
 }
 
 export function isPluginPath(value: string): boolean {
-  if (!value || value.length > LIMITS.argBytes || value.startsWith("/") || value.includes("\\") || value.includes("\0")) return false;
+  if (!value || value.length > LIMITS.argBytes || !isWellFormed(value) || value.startsWith("/") || value.includes("\\") || value.includes("\0")) return false;
   return value.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 }
 
@@ -272,7 +272,7 @@ function processOf(c: Check, value: unknown): ProcessSpec | null {
     Array.isArray(run) &&
     run.length > 0 &&
     run.length <= LIMITS.argv &&
-    run.every((arg) => typeof arg === "string" && arg.length > 0 && new TextEncoder().encode(arg).length <= LIMITS.argBytes && !arg.includes("\0"));
+    run.every((arg) => typeof arg === "string" && arg.length > 0 && isWellFormed(arg) && new TextEncoder().encode(arg).length <= LIMITS.argBytes && !arg.includes("\0"));
   if (!okArgs) {
     c.problems.push(`process.run must be a list of 1 to ${LIMITS.argv} arguments, the program first`);
     return null;
