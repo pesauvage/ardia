@@ -3,7 +3,7 @@ import type { ActionState, InstalledExtension } from "../../state/extensions/sto
 import { Badge, Button, ContextMenuArea, Symbol, useToolbarRowContext } from "../ui";
 import { chooseFromMenu } from "../../state/app/menuChoice";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, Image, PanResponder, View } from "react-native";
+import { Animated, Image, PanResponder, View, type ImageSourcePropType } from "react-native";
 import { useTheme } from "../ui/theme";
 import type { ToolbarPalette } from "../ui/toolbarColors";
 import { usePages } from "../../state/tabs/pageState";
@@ -286,6 +286,8 @@ export function OverflowButton({
   palette,
   onActivate,
   slot = "*",
+  asset,
+  glyph,
 }: {
   windowId: string;
   tabId: string;
@@ -293,6 +295,8 @@ export function OverflowButton({
   palette: ToolbarPalette;
   onActivate?: () => void;
   slot?: string;
+  asset?: ImageSourcePropType;
+  glyph?: number;
 }) {
   const { ref, measure } = useAnchor(windowId, tabId, slot);
   const onPress = async () => {
@@ -308,7 +312,7 @@ export function OverflowButton({
   };
   return (
     <View ref={ref} onLayout={() => void measure()}>
-      <Button variant="icon" icon="puzzlepiece.extension" look="extension" palette={palette} tooltip="Extensions" onPress={() => void onPress()} />
+      <Button variant="icon" icon="puzzlepiece.extension" asset={asset} glyph={glyph} look="extension" palette={palette} tooltip="Extensions" onPress={() => void onPress()} />
     </View>
   );
 }

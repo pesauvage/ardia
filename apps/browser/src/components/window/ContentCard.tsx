@@ -24,7 +24,7 @@ import { PeekOverlay } from "../peek/PeekOverlay";
 import { dismissPeek, startPeeks } from "../../state/peek/actions";
 import { usePaneLayout } from "./usePaneLayout";
 import { cardChrome, developerBarShown } from "./paneChrome";
-import { DEVELOPER_BAR } from "../toolbar/DeveloperBar";
+import { DEVELOPER_BAR } from "../toolbar/tokens";
 import { useDeveloperMode } from "../../state/site/developerMode";
 import { TabPane } from "./TabPane";
 import { BesidePeekPopovers, PeekPage } from "./PageOverlays";

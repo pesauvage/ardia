@@ -1,4 +1,5 @@
 import { curve, duration } from "../ui/motion";
+import { TOOLBAR_ROWS } from "../../lib/toolbarRow";
 
 export const GLYPH = 13;
 
@@ -53,4 +54,17 @@ export const HISTORY_BUTTON_MOTION = {
   incomingDelay: 35,
   travel: 4,
   pressTravel: 1.5,
+} as const;
+
+export const DEVELOPER_ROW = { ...TOOLBAR_ROWS.compact, button: 20, buttonRadius: 5, extensionButton: 20 };
+
+export const DEVELOPER_BAR = {
+  height: DEVELOPER_ROW.height,
+  stripeOpacity: { lightInk: 0.025, darkInk: 0.035 },
+  urlSize: 11.5,
+  dividerLength: 12,
+  edge: 6,
+  urlGap: 6,
+  groupGap: 6,
+  extensionsGlyph: 12,
 } as const;
