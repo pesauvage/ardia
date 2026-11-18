@@ -99,6 +99,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          submodules: true
           persist-credentials: false
       - id: paths
         run: |
@@ -153,7 +154,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/Library/Caches/ardia-cli-build
-          key: ardia-cli-${{ hashFiles('apps/cli/scripts/build.sh', 'apps/cli/requirements.lock') }}
+          key: ardia-cli-${{ hashFiles('plugins/plugins/cli/scripts/build.sh', 'plugins/plugins/cli/requirements.lock') }}
       - name: Pods
         working-directory: apps/browser/macos
         run: pod install
@@ -167,11 +168,11 @@ jobs:
             echo "::notice::pod install only quoted MARKETING_VERSION: kept, not counted as changes"
             git update-index --assume-unchanged "$pbx"
           fi
-          dirty=$(git status --porcelain -- apps/browser apps/cli packages engine scripts/dmg | grep -v ' apps/browser/build' || true)
+          dirty=$(git status --porcelain -- apps/browser plugins packages engine scripts/dmg | grep -v ' apps/browser/build' || true)
           [ -z "$dirty" ] || {
             echo "::error::installing changed tracked files, so release.sh would refuse the tree:"
             echo "$dirty"
-            git diff -- apps/browser apps/cli packages engine scripts/dmg | head -150
+            git diff -- apps/browser plugins packages engine scripts/dmg | head -150
             exit 1
           }
       - name: Build
@@ -190,7 +191,7 @@ jobs:
           DIST: ${{ steps.paths.outputs.dist }}
         run: |
           COPYFILE_DISABLE=1 tar --no-mac-metadata -cf "$RUNNER_TEMP/build.tar" -C "$DIST" Ardia.xcarchive provenance.txt \
-            "ardia-cli-$VERSION-macos-arm64.tar.gz" "ardia-cli-$VERSION-macos-arm64.tar.gz.sha256"
+            "ardia-cli-$VERSION-macos-arm64.tar.gz" "ardia-cli-$VERSION-macos-arm64.tar.gz.sha256" plugins
       - if: always() && steps.cas.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -323,6 +324,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          submodules: true
           persist-credentials: false
       - uses: ./.github/actions/linux-setup
         with:
@@ -339,7 +341,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ~/.cache/ardia-cli-build
-          key: ardia-cli-build-linux-x64-${{ hashFiles('apps/cli/scripts/build.sh', 'apps/cli/requirements.lock') }}
+          key: ardia-cli-build-linux-x64-${{ hashFiles('plugins/plugins/cli/scripts/build.sh', 'plugins/plugins/cli/requirements.lock') }}
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: packages/ardiacore/vendor/ubo

@@ -3,19 +3,41 @@
 `ardia` drives a running Ardia from the terminal. `ardia browse` is how an agent drives the browser: agent-browser's
 commands on a small CDP client of its own (`ardia_cli/cdp.py` over the WebSocket client in `ardia_cli/wsclient.py`). The other commands run Ardia's own commands, stream its events,
 run hooks and userscripts, edit its config and read its browsing data. The `ardia` program is a small Rust binary
-(`apps/cli/rust`) that serves a few commands itself and hands every other one to the Python CLI it ships with (see The
-Rust entry point). It's a separate download, not part of the app bundle. The app ships `install.sh` and runs it on its own: about 8 s after the first window of a launch, when no CLI
-is installed and `ardia-cli.json` says none ever was (no `version`, `binPath` or `autoInstalledAt`), it installs one
-(at most 3 tries across launches, `autoInstallTries`, saved before each try; no try when it can't be saved) and, once
-that works, turns on "Let the ardia command control Ardia" unless the user turned it off themselves (`cliControl` in
-`settingsMeta.chosen`, not `inferred`), checked again when the install ends. A launch that finds a started auto install
-with no `autoInstalledAt` (the app quit mid-install) finishes it. A CLI the user removed after it was installed stays
-removed. An installed CLI older than the app is upgraded on the same schedule, and each upgrade installs and
-refreshes the agent skill (`ardia skills install --auto`, `ardia skills refresh`). Settings › Advanced installs or
-reinstalls it by hand. Test instances install only with `cliHome` and `cliBinDir` set (the installer's `HOME` is then
-`<cliHome>/home`, so the skill copies land there), and on their own only with a `file://` `cliUrl`; a build without a pinned digest never installs on its own (`CliInstaller.canInstallUnattended`).
-Dashboard: `usage_counts.cli_auto_installs`, `cli_auto_install_failures`, `cli_auto_enables`, `cli_upgrades`,
-`cli_upgrade_failures`, `cli_settings_installs`, `cli_settings_install_failures`.
+(`plugins/plugins/cli/rust`) that serves a few commands itself and hands every other one to the Python CLI it ships with (see The
+Rust entry point).
+
+It is the **Command Line** plugin, `cli`, built into the app and **always on** (`docs/plugins.md` › Built-in plugins,
+› programs): its source is `plugins/cli` in github.com/ardia-browser/plugins, mounted here as the `plugins` submodule
+(`plugins/plugins/cli`). There is nothing to install or turn on, and nothing in Settings turns it off. At every launch
+Ardia keeps `~/.local/bin/ardia` linked to its copy in `~/Library/Application Support/Ardia/Programs/cli/`, makes a new
+copy when the app brings a new version, checked against the digest in the app's signed `Info.plist`, and runs the
+plugin's after-update actions once per new version from that version's folder: `ardia skills install --auto`,
+`ardia skills refresh`, `ardia computer refresh` (what `install.sh` ran after an upgrade). Its first link on a data
+folder turns on "Let the ardia command control Ardia" unless you turned that off yourself (`cliControl` in
+`settingsMeta.chosen`, not `inferred`), once (`controlGranted` in `plugins.json`); after that the setting is only
+yours, and nothing flips it back. Settings › Advanced › Command line shows where `ardia` is, or why it couldn't be put
+there, with Try Again. There's no uninstall: removing the link brings it back at the next launch.
+
+**An existing install is adopted** at the first launch of this version, with nothing to do: the link at
+`~/.local/bin/ardia` (which pointed into `~/Library/Application Support/Ardia/CLI`) moves to the new copy, so there's
+one `ardia` on PATH; `CLI/current` becomes a link to `Programs/cli/current`, so MCP entries, the cua-driver shim and
+the hooks agent saved as `$ARDIA_CLI_HOME/current/bin/ardia` keep working (`ardia computer` trusts that link only when
+it points at the store of the `ardia` that's running; on a fresh install it writes `Programs/cli/current/bin/ardia`
+into MCP entries and the cua-driver shim, never a version folder); old versions there go once no running `ardia` leases them; and the CLI home's own state (`usage.json`,
+feedback notes, `cua-driver/`) stays where it is, with `$ARDIA_CLI_HOME` unchanged. Dashboard: `usage_counts.program_links`,
+`program_link_failures`, `program_adoptions`.
+
+**Linux** has no plugins yet (#2495), so there the app still installs the command itself: about 8 s after the first
+window of a launch, when no CLI is installed and `ardia-cli.json` says none ever was (no `version`, `binPath` or
+`autoInstalledAt`), it installs one (at most 3 tries across launches, `autoInstallTries`, saved before each try; no try
+when it can't be saved) and, once that works, turns on "Let the ardia command control Ardia" unless the user turned it
+off themselves, checked again when the install ends. A launch that finds a started auto install with no
+`autoInstalledAt` (the app quit mid-install) finishes it. A CLI the user removed after it was installed stays removed.
+An installed CLI older than the app is upgraded on the same schedule, and each upgrade installs and refreshes the agent
+skill. Settings › Advanced installs or reinstalls it by hand. Test instances install only with `cliHome` and
+`cliBinDir` set, and on their own only with a `file://` `cliUrl`. The engine's installer is `ac_linux_cli.cc`
+(`docs/linux-port.md`). Dashboard: `usage_counts.cli_auto_installs`, `cli_auto_install_failures`, `cli_auto_enables`,
+`cli_upgrades`, `cli_upgrade_failures`, `cli_settings_installs`, `cli_settings_install_failures`.
 
 While it drives a page, a pill floats over the bottom centre of the page ("Claude Code is controlling Ardia · Stop", or
 "The ardia command is controlling Ardia" when it can't tell who runs it; Stop turns the setting off). It shows for a
@@ -43,8 +65,8 @@ it never changes what a connection may do, and both ends strip control and invis
 characters (the app keeps `app` only when it's an absolute, outermost `.app` path). When several run at once the pill
 names the most recent one; a pill that hid and shows again without a new name says "The ardia command".
 
-Code: `apps/cli` (`ardia_cli`, `install.sh`, `scripts/build.sh`). It runs on macOS (Apple silicon) and Linux
-(x86_64). Dependencies are pinned with hashes in `apps/cli/requirements.lock` (regenerate with `uv pip compile
+Code: `plugins/plugins/cli` (`ardia_cli`, `install.sh`, `scripts/build.sh`). It runs on macOS (Apple silicon) and Linux
+(x86_64). Dependencies are pinned with hashes in `plugins/plugins/cli/requirements.lock` (regenerate with `uv pip compile
 requirements.in --python-version 3.13 --python-platform aarch64-apple-darwin --generate-hashes --no-annotate
 --no-header -o requirements.lock`, then copy the pins into `pyproject.toml`). uv writes the hash of every file a
 pinned version publishes, so the one lock covers both platforms: compiled with `--python-platform
@@ -76,7 +98,7 @@ you bump a pin.
   file alone. A folder counts as ours only when it isn't a link and its marker is a plain file naming vendor
   `ardia`. `install` also adopts a copy from before the marker, but only when its files, none of them links, have
   exactly the paths and SHA-256 of a version we shipped (`ardia_cli/skill_hashes.json`, frozen, written from git
-  history by `apps/cli/scripts/skill-hashes.py`, which `--check`s it). Anything else, a foreign skill named ardia
+  history by `plugins/plugins/cli/scripts/skill-hashes.py`, which `--check`s it). Anything else, a foreign skill named ardia
   included, is refused with the folder's path; `--replace` removes that one folder (a link itself, never its target)
   and installs fresh. Each folder it wrote goes into `$ARDIA_CLI_HOME/skills.json`. `ardia skills refresh` never
   adopts: it rewrites every marked folder in that list and every marked user-level folder above, prints
@@ -186,7 +208,7 @@ like, so no proxy sees the token.
 
 ## The Rust entry point
 
-`bin/ardia` is a Rust binary (`apps/cli/rust`, one dependency, `libc`; about 540 KB). It is moving the CLI off Python a
+`bin/ardia` is a Rust binary (`plugins/plugins/cli/rust`, one dependency, `libc`; about 540 KB). It is moving the CLI off Python a
 few commands at a time (issue #2461). Today it serves these itself, with the same output bytes, exit codes, control
 socket requests and telemetry as `ardia_cli`:
 
@@ -234,11 +256,11 @@ Measured on an M-series Mac mini against a hidden release-candidate instance, 25
 windows` 12 ms median from Rust against 157 ms from Python, `ardia tabs` 11 ms against 148 ms, `ardia --version` 7 ms
 against 25 ms; the first run after an install 15 ms against 1.2 s (Python writing its bytecode cache).
 
-Tests: `cargo test` in `apps/cli/rust`, and `tests/test_rust_parity.py`, which runs the binary and `python -I -m
+Tests: `cargo test` in `plugins/plugins/cli/rust`, and `tests/test_rust_parity.py`, which runs the binary and `python -I -m
 ardia_cli` against the same fake control socket and compares stdout, stderr, exit code, the requests the socket saw,
 the telemetry records, the queue and `usage.json`; it also checks a reply Rust can't mirror reaches Python, that the
 flusher Rust starts posts its event, and the lease. It needs a built binary (`cargo build`, or `ARDIA_RUST_CLI`).
-`.github/workflows/cli.yml` runs both on macOS and Linux. Inside Ardia.app itself is a later step.
+The plugins repo's `.github/workflows/cli.yml` runs both on macOS and Linux, with the whole Python suite.
 
 ## The `ardia browse` command
 
@@ -1129,18 +1151,18 @@ from their environment and a 60 s limit.
 
 ### Testing it
 
-`python -m unittest discover -s apps/cli/tests` runs the unit tests (`test_browse.py`). The end-to-end test needs a
+`python -m unittest discover -s plugins/plugins/cli/tests` runs the unit tests (`test_browse.py`). The end-to-end test needs a
 built app (never `/Applications`):
 
 ```sh
-ARDIA_BROWSE_E2E_APP=<build>/Ardia.app python -m unittest apps/cli/tests/test_browse_e2e.py
+ARDIA_BROWSE_E2E_APP=<build>/Ardia.app python -m unittest plugins/plugins/cli/tests/test_browse_e2e.py
 ```
 
 A Debug build takes its JavaScript from Metro, and the token instance has no DevTools port to find it by, so name it:
 `ARDIA_BROWSE_E2E_JS=localhost:8081`. Without it that instance never turns control on and `BrowseTokenPath` times out
 waiting for `ArdiaControl.json`.
 
-`apps/cli/scripts/token-smoke.sh <Ardia.app> <ardia command> [metro host:port]` is the short version: one hidden
+`plugins/plugins/cli/scripts/token-smoke.sh <Ardia.app> <ardia command> [metro host:port]` is the short version: one hidden
 instance on the token connection, then `read <url>`, `open <url>`, `read` and a refused `cookies`. The release smoke
 test runs it with the release's own CLI tarball against the release candidate, since nothing else runs the command
 against a real token connection.
@@ -1237,7 +1259,7 @@ looks in the cwd.
   unescaped by `UnescapeURLComponent`'s `NORMAL` rule, including its full list of characters left escaped (BiDi
   controls, spaces, default-ignorable and format characters, lock emoji) (`/café/*` matches `/caf%C3%A9`), with a
   raw fallback, and `/foo/*`
-  matching `/foo`. `apps/cli/tests` runs both against cases taken from `url_pattern_unittest.cc` and
+  matching `/foo`. `plugins/plugins/cli/tests` runs both against cases taken from `url_pattern_unittest.cc` and
   `pattern_unittest.cc`, and they agreed with a real Ardia on the glob and percent-encoding cases. Console output and uncaught exceptions count
   as the script's when a stack frame is the script's `sourceURL`; positions map back to the sources through esbuild's
   source map. Cross-origin iframes are reached by `Target.setAutoAttach` with `waitForDebuggerOnStart`, on the token
@@ -1588,9 +1610,10 @@ several a day. The bump ships with the next CLI release; `install.sh` then updat
 
 ## Install and upgrade
 
-The app runs `install.sh` with its own environment minus every `ARDIA_*` variable, plus `ARDIA_CLI_HOME`,
-`ARDIA_CLI_BIN_DIR` and `ARDIA_CLI_URL` from its `ARDIA_INSTANCE` keys `cliHome`, `cliBinDir` and `cliUrl`
-(`CliInstaller.swift`).
+On macOS Ardia installs nothing this way any more: the command comes with the app (above). `install.sh` is what Linux's
+app runs (`ac_linux_cli.cc`), with its own environment minus every `ARDIA_*` variable, plus `ARDIA_CLI_HOME`,
+`ARDIA_CLI_BIN_DIR` and `ARDIA_CLI_URL` from its `ARDIA_INSTANCE` keys `cliHome`, `cliBinDir` and `cliUrl`, and it still
+works by hand on a Mac without Ardia.
 
 `install.sh [--version V] [--sha256 DIGEST] [--uninstall]` (run with `/bin/sh`; `--help`):
 
@@ -1598,7 +1621,7 @@ The app runs `install.sh` with its own environment minus every `ARDIA_*` variabl
   and `…/ardia-cli-<V>-linux-x64.tar.gz` on Linux (https only) into a private temp dir; it runs on Apple silicon and
   x86_64 Linux and stops with an error anywhere else. Without `--version` it
   takes the latest release that has the asset. `--sha256` is the only
-  digest it trusts (the app passes `Ardia.app/Contents/Resources/ardia-cli.sha256`, which the signed bundle pins), and
+  digest it trusts (Linux's app passes the digest its signed package pins), and
   a download needs it: a `.sha256` from the same release would only prove the tarball came from wherever the tarball
   came from. Only a `file://` `ARDIA_CLI_URL` (tests) may go without it, reading `<url>.sha256`. A Debug build has no
   pinned digest, so it installs only that way.
@@ -1635,7 +1658,7 @@ updates itself. After switching `current` to a new version, `install.sh` runs `c
 
 ## Build and release
 
-`apps/cli/scripts/build.sh <version> <out dir> [--platform macos-arm64|linux-x64]` writes
+`plugins/plugins/cli/scripts/build.sh <version> <out dir> [--platform macos-arm64|linux-x64]` writes
 `ardia-cli-<version>-<platform>.tar.gz` and its `.sha256` (`sha256sum` format). The platform defaults to the host's
 and must be the host's, since the bundled Python installs the wheels and runs the checks; the Linux tarball builds on
 any x86_64 Linux with uv. Both hold python-build-standalone CPython 3.13 (release and sha256 pinned in the script per
@@ -1651,9 +1674,10 @@ one about 26 MB, 76 MB installed. Commands the Rust binary serves take about 10 
 Python about 1 s while Python writes its bytecode cache, later ones about 0.15 s. The build needs cargo (rustup); the
 Release and Linux workflows install it when the runner has none.
 
-`scripts/release.sh` builds it into the release's dist dir after the export and writes its digest to
-`Ardia.app/Contents/Resources/ardia-cli.sha256` before the app is signed. The release skill's `publish.sh` uploads the
-tarball and its `.sha256`.
+`scripts/release.sh` builds the plugin with `plugins/plugins/cli/build.sh` (the folder Ardia bundles, plus this tarball,
+which Linux and hand installs use) and `export-sign.sh` copies the folder into `Ardia.app/Contents/Resources/Plugins/cli`,
+signs its Mach-Os with the hardened runtime and writes its payload digest into `Info.plist` before the app is signed.
+The release skill's `publish.sh` uploads the tarball and its `.sha256`.
 
 ## Test
 
@@ -1670,9 +1694,9 @@ The `ArdiaControl.json` path needs the app's token server: Chrome's plain server
 socket but answers 500 on page sockets with a query. For the installer:
 
 ```sh
-apps/cli/scripts/build.sh 0.0.1 /tmp/ardia-cli-out
+plugins/plugins/cli/scripts/build.sh 0.0.1 /tmp/ardia-cli-out
 HOME=/tmp/ardia-cli-home ARDIA_CLI_URL=file:///tmp/ardia-cli-out/ardia-cli-0.0.1-macos-arm64.tar.gz \
-  /bin/sh apps/cli/install.sh
+  /bin/sh plugins/plugins/cli/install.sh
 HOME=/tmp/ardia-cli-home ardia skills install --target claude-code
 ```
 
@@ -1683,14 +1707,14 @@ control server when the port switch is set) and with control on, for example a s
 Unit tests (matching parity with node, import confinement, store rollback and recovery, symlink refusal; config
 and theme commands against the schemas in `tests/fixtures`: a hand-written `config.schema.json` that uses every keyword
 of the subset, and `theme.schema.json` as the app's `themeSchema` writes it; the Linux paths, the systemd unit
-against a fake `systemctl`, and `install.sh` run end to end from `file://` tarballs in a scratch home in `tests/test_linux.py`): `python -m unittest discover -s apps/cli/tests` with the locked dependencies
-installed. The Rust entry point: `cargo test` and `cargo clippy --all-targets -- -D warnings` in `apps/cli/rust`, then
-`cargo build` and `python -m unittest tests.test_rust_parity` from `apps/cli`. On Linux, the installer:
+against a fake `systemctl`, and `install.sh` run end to end from `file://` tarballs in a scratch home in `tests/test_linux.py`): `python -m unittest discover -s plugins/plugins/cli/tests` with the locked dependencies
+installed. The Rust entry point: `cargo test` and `cargo clippy --all-targets -- -D warnings` in `plugins/plugins/cli/rust`, then
+`cargo build` and `python -m unittest tests.test_rust_parity` from `plugins/plugins/cli`. On Linux, the installer:
 
 ```sh
-apps/cli/scripts/build.sh 0.0.1 /tmp/ardia-cli-out --platform linux-x64
+plugins/plugins/cli/scripts/build.sh 0.0.1 /tmp/ardia-cli-out --platform linux-x64
 HOME=/tmp/ardia-cli-home ARDIA_CLI_URL=file:///tmp/ardia-cli-out/ardia-cli-0.0.1-linux-x64.tar.gz \
-  /bin/sh apps/cli/install.sh
+  /bin/sh plugins/plugins/cli/install.sh
 /tmp/ardia-cli-home/.local/bin/ardia browse --port <port> open https://example.com
 /tmp/ardia-cli-home/.local/bin/ardia browse --port <port> get title
 ```

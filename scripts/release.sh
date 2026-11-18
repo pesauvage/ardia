@@ -34,6 +34,7 @@ if [ "$rc" = 1 ]; then dist="$root/dist/$version-rc"; else dist="$root/dist/$ver
 [ "$rc" = 1 ] && [ -n "${RC_DIST:-}" ] && dist="$(cd "$root" && mkdir -p "$RC_DIST" && cd "$RC_DIST" && pwd)"
 app="$dist/export/Ardia.app"
 cli_tarball="$dist/ardia-cli-$version-macos-arm64.tar.gz"
+bundled_plugins="cli"
 build_input="${RELEASE_BUILD_INPUT:-}"
 archive="$dist/Ardia.xcarchive"
 [ "$phase" = sign ] && [ -n "$build_input" ] && archive="$build_input/Ardia.xcarchive"
@@ -102,9 +103,9 @@ else
   die "no release notes: write docs/release-notes/$version.md first"
 fi
 
-dirty="$(git -C "$root" status --porcelain -- apps/browser apps/cli packages engine scripts/dmg | grep -v ' apps/browser/build' || true)"
+dirty="$(git -C "$root" status --porcelain -- apps/browser plugins packages engine scripts/dmg | grep -v ' apps/browser/build' || true)"
 if [ -n "$dirty" ]; then
-  [ "$rc" = 1 ] || { echo "$dirty" >&2; die "uncommitted changes under apps/browser, apps/cli, packages, engine or scripts/dmg (above)"; }
+  [ "$rc" = 1 ] || { echo "$dirty" >&2; die "uncommitted changes under apps/browser, plugins, packages, engine or scripts/dmg (above)"; }
   echo "warning: the candidate includes uncommitted changes:" >&2
   echo "$dirty" >&2
 fi
@@ -170,6 +171,7 @@ if [ "$phase" != sign ]; then
   {
     echo "version $version, build $release_build, $channel${version_settings:+ (${version_settings[*]})}"
     echo "commit $(git -C "$root" rev-parse HEAD)${dirty:+ + uncommitted changes}"
+    echo "plugins $(git -C "$root/plugins" rev-parse HEAD 2>/dev/null || echo missing)"
     echo "framework $(plutil -extract SCMRevision raw "$framework_src/Versions/Current/Resources/Info.plist" 2>/dev/null)"
     echo "framework built $(stat -f '%Sm' "$framework_src/Versions/Current/Chromium Framework")"
   } > "$dist/provenance.txt"
@@ -177,9 +179,13 @@ if [ "$phase" != sign ]; then
   "$stages/archive.sh" "$dist" "$framework_src" "${RELEASE_BUILD_DIR:-$root/apps/browser/build-release}" "$archive_signing" \
     ${version_settings[@]+"${version_settings[@]}"} AC_UPDATE_CHANNEL="$channel" \
     ${extra_build_settings[@]+"${extra_build_settings[@]}"}
-  echo "==> ardia CLI"
-  "$root/apps/cli/scripts/build.sh" "$version" "$dist" >"$dist/cli-build.log" 2>&1 \
-    || { tail -20 "$dist/cli-build.log" >&2; die "building the ardia CLI failed ($dist/cli-build.log)"; }
+  for name in $bundled_plugins; do
+    echo "==> Built-in plugin: $name"
+    [ -x "$root/plugins/plugins/$name/build.sh" ] || die "no plugins/plugins/$name/build.sh: run git submodule update --init plugins"
+    ARDIA_PLUGIN_VERSION="$version" "$root/plugins/plugins/$name/build.sh" "$dist/plugins" >"$dist/plugin-$name-build.log" 2>&1 \
+      || { tail -20 "$dist/plugin-$name-build.log" >&2; die "building the $name plugin failed ($dist/plugin-$name-build.log)"; }
+  done
+  mv "$dist/plugins/$(basename "$cli_tarball")" "$dist/plugins/$(basename "$cli_tarball").sha256" "$dist/"
 fi
 if [ "$phase" = build ]; then
   echo
@@ -193,10 +199,12 @@ if [ "$phase" = sign ] && [ -n "$build_input" ]; then
     [ -f "$build_input/$file" ] && [ ! -L "$build_input/$file" ] || die "no $file in $build_input"
     cp "$build_input/$file" "$dist/$file"
   done
+  [ -d "$build_input/plugins" ] || die "no plugins in $build_input"
+  ditto "$build_input/plugins" "$dist/plugins"
 fi
 [ -f "$cli_tarball.sha256" ] || die "no $cli_tarball.sha256 from --phase build"
 
-"$stages/export-sign.sh" "$dist" "$archive" "$identity" "$cli_tarball.sha256" ${provisioning_profile:+"$provisioning_profile"}
+"$stages/export-sign.sh" "$dist" "$archive" "$identity" ${provisioning_profile:+"$provisioning_profile"}
 "$stages/verify.sh" "$app" "$archive" "$version" "$release_build"
 [ "$phase" = sign ] || "$stages/launch-check.sh" "$app"
 if [ "$notarize" = 1 ]; then

@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { View } from "react-native";
-import { describeCliInstall, installCliInBackground, useCli } from "../../../state/app/cliControl";
+import { CLI_PLUGIN, describeCliInstall, installCliInBackground, useCli } from "../../../state/app/cliControl";
+import { usePluginListing, usePluginPrograms } from "../../../state/plugins/hooks";
+import { canRelink, relinkPrograms } from "../../../state/plugins/actions";
+import type { PluginListing, ProgramsState } from "../../../state/plugins/store";
+import type { SettingsPlace } from "../../../state/settings/settingsWindows";
 import { useSettings } from "../../../state/browser/hooks";
 import { updateSettings } from "../../../state/settings/actions";
 import { openChromeSettings } from "../../../state/pages/urls";
 import type { BatterySaverWhen, Settings } from "../../../state/settings/settings";
 import { keepSiteActive, stopKeepingSiteActive, type MemorySaverMode } from "../../../state/tabs/memorySaver";
 import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
-import type { SettingsPlace } from "../../../state/settings/settingsWindows";
 import { Button, DialogActions, DialogTitle, lineHeight, PopUp, Sheet, space, Text, TextField, Toggle } from "../../ui";
 import { perLook } from "../../ui/tokens";
 import { Favicon } from "../../favicon/Favicon";
@@ -130,6 +133,15 @@ function PerformanceSection() {
   );
 }
 
+const viaPlugin = PLATFORM_FEATURES.plugins;
+
+function pluginInstallLine(plugin: PluginListing | undefined, programs: ProgramsState | undefined): string {
+  if (!plugin?.manifest) return "This build of Ardia doesn't include the ardia command.";
+  if (programs?.state === "linked") return programs.linked.includes("ardia") ? `ardia is on your PATH (${programs.binDir}).` : Object.values(programs.refused).join("; ");
+  if (programs?.state === "failed") return `ardia couldn't go on your PATH: ${programs.reason}`;
+  return "Putting ardia on your PATH…";
+}
+
 function CommandLineSection() {
   const on = useSettings((s) => s.cliControl);
   const cli = useCli();
@@ -144,12 +156,18 @@ function CommandLineSection() {
           ? server.connections
             ? `Connected now: ${server.connections === 1 ? "1 session" : `${server.connections} sessions`}.`
             : "On. Nothing is connected."
-          : "Installs the ardia command and lets it open, read and act in every page you're signed in to. It stays on after you quit.";
-  const failed = !!cli.error && !cli.installing;
+          : viaPlugin
+            ? "Lets the ardia command open, read and act in every page you're signed in to. It stays on after you quit."
+            : "Installs the ardia command and lets it open, read and act in every page you're signed in to. It stays on after you quit.";
+  const plugin = usePluginListing(CLI_PLUGIN);
+  const programs = usePluginPrograms(CLI_PLUGIN);
+  const failed = viaPlugin ? canRelink(programs) : !!cli.error && !cli.installing;
   const setOn = (next: boolean) => {
     updateSettings({ cliControl: next });
-    if (next && !cli.installing && (!cli.installedVersion || cli.error)) void installCliInBackground("settings");
+    if (!viaPlugin && next && !cli.installing && (!cli.installedVersion || cli.error)) void installCliInBackground("settings");
   };
+  const tryAgain = () => (viaPlugin ? relinkPrograms(CLI_PLUGIN) : void installCliInBackground("settings"));
+  const installLine = viaPlugin ? pluginInstallLine(plugin, programs) : on || cli.installedVersion || cli.installing || failed ? describeCliInstall(cli) : null;
   return (
     <>
       <SectionHeader title="Command line and automation" />
@@ -161,16 +179,16 @@ function CommandLineSection() {
               <Text size="caption" tone="textSecondary" style={NOTE()}>
                 {serverNote}
               </Text>
-              {on || cli.installedVersion || cli.installing || failed ? (
+              {installLine ? (
                 <Text selectable size="caption" tone={failed ? "destructive" : "textSecondary"} style={NOTE()}>
-                  {describeCliInstall(cli)}
+                  {installLine}
                 </Text>
               ) : null}
             </View>
           }
         >
-          {on && failed ? <Button title="Try Again" onPress={() => void installCliInBackground("settings")} /> : null}
-          {on && !failed && cli.installedVersion && !cli.installing ? <Button title="Reinstall" onPress={() => void installCliInBackground("settings")} /> : null}
+          {failed && (on || viaPlugin) ? <Button title="Try Again" onPress={tryAgain} /> : null}
+          {on && !viaPlugin && !failed && cli.installedVersion && !cli.installing ? <Button title="Reinstall" onPress={() => void installCliInBackground("settings")} /> : null}
           <Toggle value={on} accessibilityLabel="ardia command" onChange={setOn} />
         </Row>
         <SettingToggle anchor="advanced.compactCliPill" />

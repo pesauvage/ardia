@@ -21,7 +21,7 @@ gh release upload command for the assets.
   --out DIR          where the assets go (default dist/<version>/linux); an
                      existing DIR must be empty or an earlier output of this script
   --allow-dirty      build with uncommitted changes under apps/browser,
-                     apps/linux, apps/cli, packages, engine or scripts/linux
+                     apps/linux, plugins, packages, engine or scripts/linux
                      (a test build, never a release)
   -h, --help         show this help
 
@@ -61,10 +61,10 @@ project_version=$(sed -n 's/.*MARKETING_VERSION = "\{0,1\}\([^";]*\)"\{0,1\};/\1
   || die "MARKETING_VERSION is '$project_version', not $version: the Linux release follows the macOS release of the same version"
 [ -f "docs/release-notes/$version.md" ] || die "no release notes: write docs/release-notes/$version.md first"
 
-dirty=$(git status --porcelain -- apps/browser apps/linux apps/cli packages engine scripts/linux | grep -v ' apps/browser/build' || true)
+dirty=$(git status --porcelain -- apps/browser apps/linux plugins packages engine scripts/linux | grep -v ' apps/browser/build' || true)
 if [ -n "$dirty" ]; then
   echo "$dirty" >&2
-  [ "$allow_dirty" = 1 ] || die "uncommitted changes under apps/browser, apps/linux, apps/cli, packages, engine or scripts/linux (above)"
+  [ "$allow_dirty" = 1 ] || die "uncommitted changes under apps/browser, apps/linux, plugins, packages, engine or scripts/linux (above)"
   warn "building with the uncommitted changes above: a test build, never a release"
 fi
 
@@ -147,7 +147,7 @@ pnpm --filter @ardia/linux build >"$out/ui-build.log" 2>&1 \
   || { tail -20 "$out/ui-build.log" >&2; die "building apps/linux/dist failed ($out/ui-build.log)"; }
 
 echo "==> ardia CLI"
-apps/cli/scripts/build.sh "$version" "$out" --platform linux-x64 >"$out/cli-build.log" 2>&1 \
+plugins/plugins/cli/scripts/build.sh "$version" "$out" --platform linux-x64 >"$out/cli-build.log" 2>&1 \
   || { tail -20 "$out/cli-build.log" >&2; die "building the ardia CLI failed ($out/cli-build.log)"; }
 [ -f "$out/$cli_name" ] && [ -f "$out/$cli_name.sha256" ] || die "the CLI build left no $cli_name and .sha256 in $out"
 

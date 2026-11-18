@@ -187,9 +187,14 @@ kill -KILL "$pid" 2>/dev/null || true
 pid=""
 node "$root/packages/ardiacore/scripts/popup-check.mjs" "$app" "$work/popup-check" || status=1
 cli_tarball="$dist/ardia-cli-$version-macos-arm64.tar.gz"
-if [ -f "$cli_tarball" ]; then
+built_in_cli="$app/Contents/Resources/Plugins/cli/bin/ardia"
+if [ -x "$built_in_cli" ]; then
+  "$root/scripts/release/cli-bootstrap-smoke.sh" "$app" "$version" || status=1
+  mkdir -p "$work/cli" && ditto "$app/Contents/Resources/Plugins/cli" "$work/cli/built-in"
+  ARDIA_REPO="$root" ARDIA_CLI_HOME="$work/cli-home" "$root/plugins/plugins/cli/scripts/token-smoke.sh" "$app" "$work/cli/built-in/bin/ardia" || status=1
+elif [ -f "$cli_tarball" ]; then
   mkdir -p "$work/cli" && tar -xzf "$cli_tarball" -C "$work/cli"
-  ARDIA_CLI_HOME="$work/cli-home" "$root/apps/cli/scripts/token-smoke.sh" "$app" "$(ls "$work"/cli/*/bin/ardia)" || status=1
+  ARDIA_REPO="$root" ARDIA_CLI_HOME="$work/cli-home" "$root/plugins/plugins/cli/scripts/token-smoke.sh" "$app" "$(ls "$work"/cli/*/bin/ardia)" || status=1
 elif [ -z "${SMOKE_APP:-}" ]; then
   check "the release has $(basename "$cli_tarball")" 0
 fi

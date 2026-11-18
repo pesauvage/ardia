@@ -171,7 +171,7 @@ stays up. That's GPL-3.0 §6(d) for the GPL parts (uBlock Origin today), and it'
 3. Commit both ("Release <version>" or "Nightly <version>"), push, and dispatch the Release workflow ("CI releases"
    below), which runs the rest. Or run it here: `scripts/release.sh <version>` (a `-nightly.<n>`
    version is a nightly). It stops right away if the notes file is missing or lacks its `date` and
-   `headline`, if the tree under `apps/browser`, `apps/cli`, `packages`, `engine` or `scripts/dmg` has uncommitted changes, or if the engine
+   `headline`, if the tree under `apps/browser`, `plugins`, `packages`, `engine` or `scripts/dmg` has uncommitted changes, or if the engine
    framework is older than the tree's ArdiaCore sources or the Chromium tree differs from `engine/ardiacore`
    (`apply.sh --check`), if the version doesn't fit the channel or the notes' `channel`, if it can't read the published
    appcast, if the build number isn't above every build in it, or (outside `--rc`) if `prebuilt-engines.tsv` lists no
@@ -291,7 +291,7 @@ The first stable release after that creates `ardia-bin` on the AUR. To create it
 
 The script refuses what `release.sh` refuses: a missing notes file or one whose frontmatter doesn't read, a
 `MARKETING_VERSION` other than `<version>`, and uncommitted changes (here under `apps/browser`, `apps/linux`,
-`apps/cli`, `packages`, `engine` or `scripts/linux`). It uses the exact Linux engine for HEAD's engine key
+`plugins`, `packages`, `engine` or `scripts/linux`). It uses the exact Linux engine for HEAD's engine key
 (`engine/engine-key.sh`), published in ardia-browser/ardia. Without one the `linux` job fails and the macOS release
 ships alone; build the engine, then run `scripts/linux/release.sh <version>` on a Linux machine at the release commit
 and the `gh release upload` command it prints. A nightly and a stable go the same way.

@@ -102,7 +102,7 @@ package job red after almost every merge.
   1. reads the version from `MARKETING_VERSION` in the Xcode project, as `scripts/release.sh` does;
   2. fetches the engine (cached per engine key and table);
   3. builds `apps/linux/dist`;
-  4. installs uv and builds the CLI with `apps/cli/scripts/build.sh <version> <dist> --platform linux-x64`; its Python
+  4. installs uv and builds the CLI with `plugins/plugins/cli/scripts/build.sh <version> <dist> --platform linux-x64` (the `plugins` submodule, checked out for this job); its Python
      and esbuild downloads are cached;
   5. prepares uBlock Origin with `scripts/linux/fetch-ubo.sh` (cached);
   6. runs `scripts/linux/package.py --out <engine> --version <version> --cli <CLI tarball> --deb <path> --appimage
@@ -239,7 +239,7 @@ hand. The one-time setup is in [releasing.md](releasing.md#linux-package).
 ## Triggers and gating
 
 - **When it runs.** On pull requests and pushes to `main` that touch what the Linux build reads: `apps/linux`,
-  `apps/browser`, `apps/cli`, `packages`, `engine`, `scripts/linux`, `scripts/lib`, `scripts/agent/locked`,
+  `apps/browser`, `plugins`, `packages`, `engine`, `scripts/linux`, `scripts/lib`, `scripts/agent/locked`,
   `infra/feedback/lib`, `patches`, the workspace manifests and lockfile, the Linux setup action and the workflow itself.
   Mac-only changes elsewhere skip it. It can still be started by hand, with `exact` to require this commit's engine.
 - **Gate.** Like `ios.yml` and `android.yml`, a `gate` job runs `vouch.gate` first, and both jobs need it. An unvouched
