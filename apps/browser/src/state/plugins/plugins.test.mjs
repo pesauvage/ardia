@@ -559,3 +559,26 @@ test("when plugins.json can't be saved, turning a plugin on or off changes no se
   assert.ok(lifecycle.disablePlugin("example"));
   assert.deepEqual(S().settings.commandBarStart, original);
 });
+
+test("approving a plugin's changed manifest takes its old default out of the stack", async () => {
+  S().hydrate({});
+  for (const name of Object.keys(P().records)) lifecycle.disablePlugin(name);
+  const original = S().settings.commandBarStart;
+  const make = (name, limit) => {
+    const doc = JSON.parse(FIXTURE);
+    doc.name = name;
+    doc.settings.defaults = { commandBarStart: { openTabs: { limit } } };
+    return { name, status: "ok", text: JSON.stringify(doc) };
+  };
+  host.folders = [make("first", 2), make("second", 3)];
+  await lifecycle.rescanPlugins();
+  for (const name of ["first", "second"]) assert.ok(lifecycle.requestPluginConsent(name) && lifecycle.enablePlugin(name, P().consent.hash));
+  host.folders = [make("first", 4), make("second", 3)];
+  await lifecycle.rescanPlugins();
+  assert.ok(lifecycle.requestPluginConsent("first") && lifecycle.enablePlugin("first", P().consent.hash));
+  assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 4 } });
+  lifecycle.disablePlugin("first");
+  assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 3 } });
+  lifecycle.disablePlugin("second");
+  assert.deepEqual(S().settings.commandBarStart, original, "the first manifest's old value never comes back");
+});

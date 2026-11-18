@@ -112,7 +112,7 @@ export function enablePlugin(name: string, hash: string): boolean {
   const before = recordOf(currentPlugins(), name);
   const values = { ...defaultValues(manifest), ...before.values };
   const kept = before.enabled && before.approved === hash;
-  const records = currentPlugins().records;
+  const records = kept || !before.enabled ? currentPlugins().records : spliceApplied(currentPlugins().records, name);
   const plan = kept ? { patch: {}, applied: before.applied } : planEnable(manifest, records, name, before.applied);
   if (!saveRecords({ ...records, [name]: { enabled: true, approved: hash, values, applied: plan.applied } })) return false;
   applySettingsPatch(plan.patch);
