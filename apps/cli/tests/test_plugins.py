@@ -253,6 +253,26 @@ class PluginsCliTest(unittest.TestCase):
         self.assertEqual(call.call_args.args[1:3], ("plugins.call", {"plugin": "example", "tool": "hello", "input": {"who": "you"}}))
         self.assertGreaterEqual(call.call_args.args[3], 300)
 
+    def test_remove_leaves_the_files_when_ardia_got_the_request_but_never_answered(self):
+        self.ardia("install", str(EXAMPLE))
+        lost = control.unreachable("timed out")
+        lost.sent = True
+        self.unreachable.stop()
+        with mock.patch.object(control, "call", side_effect=lost):
+            status, _, err = self.ardia("remove", "example")
+        self.unreachable.start()
+        self.assertEqual(status, 2)
+        self.assertIn("left as it is", err)
+        self.assertTrue((self.data / "config" / "plugins" / "example" / "plugin.json").exists(), "the app may still be stopping its helper")
+
+    def test_call_input_that_cant_be_sent_as_utf8_is_a_problem_not_a_crash(self):
+        self.unreachable.stop()
+        with mock.patch.object(control, "call", side_effect=UnicodeEncodeError("utf-8", "\ud800", 0, 1, "surrogates not allowed")):
+            status, _, err = self.ardia("call", "example", "hello", '{"text": "\\ud800"}')
+        self.unreachable.start()
+        self.assertEqual(status, 1)
+        self.assertIn("can't be sent as UTF-8", err)
+
 
 if __name__ == "__main__":
     unittest.main()
