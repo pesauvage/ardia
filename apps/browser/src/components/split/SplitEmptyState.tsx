@@ -36,7 +36,11 @@ export function SplitEmptyState({ tabId, focused }: { tabId: string; focused: bo
       replaceSplitPane(tabId, selectedId);
     } else if (text.trim()) navigate(tabId, text.trim());
   };
-  const move = (step: 1 | -1) => setSelected(suggestions[Math.min(suggestions.length - 1, (selectedId ? suggestions.indexOf(selectedId) : -1) + step)] ?? null);
+  const move = (step: 1 | -1) => {
+    const stops = suggestions.length + 1;
+    const at = selectedId ? suggestions.indexOf(selectedId) : -1;
+    setSelected(suggestions[((at + 1 + step + stops) % stops) - 1] ?? null);
+  };
 
   return (
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: space.xl }}>
