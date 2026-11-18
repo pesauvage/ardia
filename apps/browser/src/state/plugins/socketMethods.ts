@@ -34,7 +34,9 @@ export function pluginSocketMethod(method: string, params: Record<string, unknow
   if (method === "plugins") return { result: pluginList() };
   if (!method.startsWith("plugins.")) return null;
   const name = nameOf(params);
-  const known = name !== null && !!currentPlugins().listings[name];
+  const plugins = currentPlugins();
+  const known = name !== null && Object.hasOwn(plugins.listings, name);
+  const leftOn = name !== null && Object.hasOwn(plugins.records, name) && plugins.records[name]!.enabled;
   switch (method) {
     case "plugins.enable":
       if (!known) return failure("bad_request", `There's no plugin ${String(name)}.`);
@@ -43,7 +45,7 @@ export function pluginSocketMethod(method: string, params: Record<string, unknow
       openSettings("plugins", null, name);
       return { result: { waiting: true } };
     case "plugins.disable": {
-      if (!known) return failure("bad_request", `There's no plugin ${String(name)}.`);
+      if (!known && !leftOn) return failure("bad_request", `There's no plugin ${String(name)}.`);
       const consent = consentNow();
       if (!disablePlugin(name, consent)) return failure("failed", "Couldn't save plugins.json.");
       return pluginRecordsSaved(consent).then((saved) => (saved ? { result: { ok: true } } : failure("failed", "It's off for now, but plugins.json couldn't be saved, so it may be on again after Ardia restarts.")));

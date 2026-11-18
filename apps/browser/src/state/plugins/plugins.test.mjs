@@ -920,6 +920,19 @@ test("a removal whose last plugins.json write fails says the files are gone, and
   assert.equal(recordValues("example"), undefined, "a new install doesn't inherit the removed plugin's values");
 });
 
+test("a plugin whose folder was deleted by hand can still be turned off, which restores its defaults", async () => {
+  const original = S().settings.commandBarStart;
+  await enabled();
+  assert.notDeepEqual(S().settings.commandBarStart, original);
+  host.folders = [];
+  await lifecycle.rescanPlugins(consentToken());
+  assert.equal(P().listings.example, undefined);
+  assert.deepEqual(await pluginSocketMethod("plugins.disable", { name: "example" }), { result: { ok: true } });
+  assert.deepEqual(S().settings.commandBarStart, original);
+  assert.equal(pluginSocketMethod("plugins.disable", { name: "constructor" }).error?.code, "bad_request", "only a plugin's own name counts");
+  await install();
+});
+
 test("an open queued when its run ends never runs", async () => {
   const run = await enabled();
   S().createWindow({ url: "https://a.example/" });

@@ -407,8 +407,10 @@ version than `plugin.schema.json` knows is refused; then the schema (rows includ
 `tabs`, page names Ardia keeps, settings with approvals of their own). Only the app knows whether `requires` fits the
 Ardia that runs it. `install` checks the copy it is about to publish again. `tests/fixtures/plugins/rejected-manifests.json`
 is a list both the app's tests and the CLI's tests refuse.
-- `ardia plugins remove NAME`: through Ardia when it is reachable (as Settings' Remove), else deletes the folder.
-- `ardia plugins enable NAME`, `ardia plugins disable NAME`.
+- `ardia plugins remove NAME`: through Ardia when it is reachable (as Settings' Remove), else deletes the folder. If
+  Ardia got the request but its answer was lost, the folder is left alone; run it again.
+- `ardia plugins enable NAME`, `ardia plugins disable NAME`. `disable` also works for a plugin that was on when its
+  folder was deleted by hand, and puts back the settings it changed.
 - `ardia plugins call NAME TOOL [JSON]`: calls a tool and prints its result as JSON (exit 1 on its error).
 
 The control socket's protocol 4 adds `plugins`, `plugins.enable` (`{"waiting": true}` once the sheet is up),
