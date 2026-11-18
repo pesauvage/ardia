@@ -79,11 +79,8 @@ public class PluginsModule: Module {
 
   private static func remove(_ name: String, _ promise: Promise) {
     PluginHost.shared.remove(name) { problem in
-      PluginPageView.removeData(name) {
-        var reply: [String: Any] = ["ok": problem == nil]
-        if let problem { reply["reason"] = problem }
-        promise.resolve(reply)
-      }
+      if let problem { return promise.resolve(["ok": false, "reason": problem]) }
+      PluginPageView.removeData(name) { promise.resolve(["ok": true]) }
     }
   }
 

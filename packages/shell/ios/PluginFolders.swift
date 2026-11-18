@@ -21,7 +21,8 @@ struct PluginFolders {
   }
 
   static func isName(_ name: String) -> Bool {
-    namePattern.firstMatch(in: name, range: NSRange(name.startIndex..., in: name)) != nil
+    let whole = NSRange(name.startIndex..., in: name)
+    return namePattern.firstMatch(in: name, range: whole)?.range == whole
   }
 
   func lexicalFolder(_ name: String) -> String? {
@@ -70,7 +71,12 @@ struct PluginFolders {
       }
     }
     let data = (dataRoot() as NSString).appendingPathComponent(name)
-    if lstat(data, &info) == 0 { try? FileManager.default.removeItem(atPath: data) }
+    guard lstat(data, &info) == 0 else { return nil }
+    do {
+      try FileManager.default.removeItem(atPath: data)
+    } catch {
+      return "Its folder is gone, but its data couldn't be deleted (\(error.localizedDescription)); removing it again finishes that."
+    }
     return nil
   }
 }

@@ -36,7 +36,8 @@ export function pluginSocketMethod(method: string, params: Record<string, unknow
   const name = nameOf(params);
   const plugins = currentPlugins();
   const known = name !== null && Object.hasOwn(plugins.listings, name);
-  const leftOn = name !== null && Object.hasOwn(plugins.records, name) && plugins.records[name]!.enabled;
+  const recorded = name !== null && Object.hasOwn(plugins.records, name);
+  const leftOn = recorded && plugins.records[name!]!.enabled;
   switch (method) {
     case "plugins.enable":
       if (!known) return failure("bad_request", `There's no plugin ${String(name)}.`);
@@ -51,7 +52,7 @@ export function pluginSocketMethod(method: string, params: Record<string, unknow
       return pluginRecordsSaved(consent).then((saved) => (saved ? { result: { ok: true } } : failure("failed", "It's off for now, but plugins.json couldn't be saved, so it may be on again after Ardia restarts.")));
     }
     case "plugins.remove":
-      if (!known) return failure("bad_request", `There's no plugin ${String(name)}.`);
+      if (!known && !recorded) return failure("bad_request", `There's no plugin ${String(name)}.`);
       return removePlugin(name).then((r) => (r.ok ? { result: { ok: true } } : failure("failed", r.reason ?? "Couldn't remove it.")));
     case "plugins.call": {
       const { plugin, tool, input } = params;
