@@ -20,8 +20,9 @@ and the `ardia` command's plugin commands still install and list files there.
 ```
 
 - The config folder is `docs/config.md`'s (`~/.config/ardia/`, or `<data dir>/config` for a scratch instance), so a
-  dotfiles repo can carry plugins. A folder or `plugin.json` may be a symlink; Ardia reads regular files only, at most
-  1 MB per manifest, and at most 64 plugins.
+  dotfiles repo can carry plugins. A plugin's folder may be a symlink (Ardia watches its target); its `plugin.json`
+  may not: a linked manifest could point anywhere Ardia doesn't watch, so it is listed as a problem. Ardia reads
+  regular files only, at most 1 MB per manifest, and at most 64 plugins.
 - The folder name is the plugin's `name`. A folder whose name doesn't match its manifest is listed with that problem.
 - Ardia watches the folder: a plugin appears, changes or disappears the moment its files do.
 - Installing, enabling and the rest need no restart. Turning a plugin off withdraws everything it added at once.

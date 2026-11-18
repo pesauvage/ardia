@@ -3,7 +3,7 @@ import type { ViewProps } from "react-native";
 
 export type PluginFolderEntry = {
   name: string;
-  status: "ok" | "missing" | "notFile" | "tooBig" | "unreadable";
+  status: "ok" | "missing" | "link" | "notFile" | "tooBig" | "unreadable";
   text?: string;
   folderId?: string;
 };

@@ -16,6 +16,7 @@ export const MAX_PLUGINS = 64;
 
 const READ_PROBLEMS: Record<Exclude<PluginFolderEntry["status"], "ok">, string> = {
   missing: "The folder has no plugin.json",
+  link: "plugin.json is a link; it must be a file in the plugin's folder",
   notFile: "plugin.json isn't a file",
   tooBig: "plugin.json is over 1 MB",
   unreadable: "plugin.json couldn't be read",

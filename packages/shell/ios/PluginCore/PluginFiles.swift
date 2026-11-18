@@ -16,12 +16,13 @@ struct FolderRefusal: Error {
 
 enum ManifestRead: Equatable {
   case text(String)
-  case missing, notFile, tooBig, unreadable
+  case missing, link, notFile, tooBig, unreadable
 
   var status: String {
     switch self {
     case .text: return "ok"
     case .missing: return "missing"
+    case .link: return "link"
     case .notFile: return "notFile"
     case .tooBig: return "tooBig"
     case .unreadable: return "unreadable"
@@ -52,8 +53,8 @@ enum PluginFiles {
   }
 
   static func readManifest(in folder: OpenedFolder) -> ManifestRead {
-    let fd = openat(folder.fd, manifestName, O_RDONLY | O_NONBLOCK | O_CLOEXEC)
-    if fd < 0 { return errno == ENOENT || errno == ENOTDIR ? .missing : .unreadable }
+    let fd = openat(folder.fd, manifestName, O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW)
+    if fd < 0 { return errno == ELOOP ? .link : errno == ENOENT || errno == ENOTDIR ? .missing : .unreadable }
     defer { Darwin.close(fd) }
     var info = stat()
     guard fstat(fd, &info) == 0 else { return .unreadable }

@@ -88,4 +88,14 @@ final class PluginFolderBindingTests: XCTestCase {
     guard case .failure(let changed) = PluginFiles.approvedFolder(path, folderId: id, approved: approved) else { return XCTFail("a changed manifest is refused") }
     XCTAssertTrue(changed.reason.contains("changed"))
   }
+
+  func testASymlinkedManifestIsRefused() throws {
+    let path = "\(root)/example"
+    try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+    try "{\"name\":\"example\"}".write(toFile: "\(root)/outside.json", atomically: false, encoding: .utf8)
+    try FileManager.default.createSymbolicLink(atPath: "\(path)/plugin.json", withDestinationPath: "\(root)/outside.json")
+    let folder = try XCTUnwrap(PluginFiles.openFolder(path))
+    defer { folder.close() }
+    XCTAssertEqual(PluginFiles.readManifest(in: folder).status, "link", "a plugin.json that is a link is never read")
+  }
 }
