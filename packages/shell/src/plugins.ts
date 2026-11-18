@@ -8,10 +8,10 @@ export type PluginFolderEntry = {
   folderId?: string;
 };
 
-export type PluginStartSpec = { name: string; run: string[]; memoryMB: number; network: boolean; folderId: string; approved: string; page: boolean };
+export type PluginStartSpec = { name: string; run: string[]; memoryMB: number; network: boolean; folderId: string; approved: string; page: boolean; launch: number };
 export type PluginStartResult = { ok: true; run: number; pid: number } | { ok: false; reason: string };
 export type PluginExit = { name: string; run: number; status: number | null; signal: number | null; overMemory: boolean };
-export type PluginLine = { name: string; run: number; line: string };
+export type PluginLine = { name: string; run: number; launch: number; line: string };
 export type PluginRemoveResult = { ok: true } | { ok: false; reason: string };
 
 export type PluginsNative = {

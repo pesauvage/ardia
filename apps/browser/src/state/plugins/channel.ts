@@ -14,7 +14,7 @@ import { launchToReplay } from "../automation/lifecycleEvents";
 import type { AutomationEventName } from "../automation/eventNames";
 import { activeManifest, currentPlugins, usePlugins } from "./store";
 import { answerCall, callTool, dropCalls } from "./tools";
-import { acceptsRun, onProcessStopped, processExited } from "./process";
+import { acceptsLine, acceptsRun, onProcessStopped, processExited } from "./process";
 import { valuesFor } from "./values";
 
 export const CHANNEL_PROTOCOL = 1;
@@ -162,8 +162,8 @@ function reply(c: Connection, id: RequestId, body: Body) {
   replyToPlugin(c.name, c.run, JSON.stringify({ id, ...body }));
 }
 
-export function handlePluginLine({ name, run, line }: PluginLine) {
-  if (!acceptsRun(name, run)) return;
+export function handlePluginLine({ name, run, launch, line }: PluginLine) {
+  if (!acceptsLine(name, run, launch)) return;
   const manifest = activeManifest(currentPlugins(), name);
   const c = connectionFor(name, run);
   const request = parseRequest(line);

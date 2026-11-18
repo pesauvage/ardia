@@ -21,6 +21,7 @@ final class PluginProcess: PluginRun {
   private var overMemory = false
   let approved: String
   let hasPage: Bool
+  let launch: Int
   var onPagePost: ((PluginProcess, PagePost) -> String?)?
   private var family: PluginFamily?
   private var log: Int32
@@ -33,6 +34,7 @@ final class PluginProcess: PluginRun {
     let folderId: String
     let approved: String
     let hasPage: Bool
+    let launch: Int
   }
 
   enum Failure: Error {
@@ -44,9 +46,10 @@ final class PluginProcess: PluginRun {
     }
   }
 
-  private init(name: String, run: Int, pid: pid_t, queue: DispatchQueue, memoryLimit: UInt64, log: Int32, approved: String, hasPage: Bool) {
+  private init(name: String, run: Int, pid: pid_t, queue: DispatchQueue, memoryLimit: UInt64, log: Int32, approved: String, hasPage: Bool, launch: Int) {
     self.approved = approved
     self.hasPage = hasPage
+    self.launch = launch
     self.log = log
     self.name = name
     self.run = run
@@ -157,7 +160,7 @@ final class PluginProcess: PluginRun {
       return .failure(.refused("it couldn't start (\(errnoText(result)))"))
     }
     let limit = UInt64(max(64, spec.memoryMB)) << 20
-    let process = PluginProcess(name: spec.name, run: run, pid: pid, queue: queue, memoryLimit: limit, log: log, approved: spec.approved, hasPage: spec.hasPage)
+    let process = PluginProcess(name: spec.name, run: run, pid: pid, queue: queue, memoryLimit: limit, log: log, approved: spec.approved, hasPage: spec.hasPage, launch: spec.launch)
     process.watch(channel: pair[0], onLine: onLine, onExit: onExit)
     return .success(process)
   }

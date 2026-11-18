@@ -57,7 +57,7 @@ final class PluginHost {
     let result = PluginProcess.spawn(
       spec, run: nextRun, folders: folders, queue: queue,
       onLine: { [weak self] process, line in
-        self?.sink?.send("onLine", ["name": process.name, "run": process.run, "line": line])
+        self?.sink?.send("onLine", ["name": process.name, "run": process.run, "launch": process.launch, "line": line])
       },
       onExit: { [weak self] process, status, signal, overMemory in
         guard let self else { return }

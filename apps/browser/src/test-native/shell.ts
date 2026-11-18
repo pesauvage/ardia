@@ -429,6 +429,7 @@ export const pluginHost = {
   startResult: null as null | { ok: false; reason: string },
   removeGate: null as null | Promise<void>,
   stopGate: null as null | Promise<void>,
+  startGate: null as null | Promise<void>,
   listGate: null as null | Promise<void>,
   listFails: false,
   nextRun: 0,
@@ -447,6 +448,7 @@ const plugins: Modules["ArdiaPlugins"] = {
     pluginHost.starts.push({ ...spec, run: [...spec.run] });
     if (pluginHost.startResult) return pluginHost.startResult;
     const run = ++pluginHost.nextRun;
+    await pluginHost.startGate;
     return { ok: true, run, pid: 1000 + run };
   },
   stop: async (name, run, graceMs) => void (pluginHost.stops.push({ name, run, graceMs }), await pluginHost.stopGate),

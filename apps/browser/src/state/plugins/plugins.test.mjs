@@ -84,7 +84,8 @@ test("an installed plugin stays off until its consent is accepted, then starts i
   assert.equal(lifecycle.enablePlugin("example", "0".repeat(64)), false, "a stale hash never turns it on");
   const run = await enabled();
   assert.ok(run > 0);
-  assert.deepEqual(host.starts.at(-1), { name: "example", run: ["/usr/bin/python3", "helper.py"], memoryMB: 256, network: false, folderId: "", approved: P().records.example.approved, page: true });
+  assert.deepEqual(host.starts.at(-1), { name: "example", run: ["/usr/bin/python3", "helper.py"], memoryMB: 256, network: false, folderId: "", approved: P().records.example.approved, page: true, launch: host.starts.at(-1).launch });
+  assert.equal(typeof host.starts.at(-1).launch, "number", "each start carries the launch its lines must name");
   assert.equal(P().processes.example.state, "running");
   const counts = takePluginCounts();
   assert.equal(counts.plugin_enables, 1);
@@ -708,6 +709,41 @@ test("Restart stops accepting the retiring run before it asks for the stop, so a
   });
   assert.equal(P().processes.example.state, "running");
   assert.notEqual(P().processes.example.run, run);
+  lifecycle.disablePlugin("example");
+});
+
+test("a start replaced while it was pending never has its helper's lines taken, whenever Ardia hears it was replaced", async () => {
+  await enabled();
+  S().createWindow({ url: "https://a.example/" });
+  const before = tabCount();
+  let release;
+  host.startGate = new Promise((resolve) => (release = resolve));
+  try {
+    restartProcess("example");
+    await settle();
+    const retired = { run: host.nextRun, launch: host.starts.at(-1).launch };
+    restartProcess("example");
+    await settle();
+    const current = { run: host.nextRun, launch: host.starts.at(-1).launch };
+    assert.notEqual(current.launch, retired.launch);
+    const asked = ++nextId;
+    stub.emitPluginLine({ name: "example", run: retired.run, launch: retired.launch, line: JSON.stringify({ id: asked, method: "open", params: { urls: ["https://b.example/from-the-retired-start"] } }) });
+    await settle();
+    assert.equal(tabCount(), before, "the retired start's request is refused before its start settles");
+    const hello = ++nextId;
+    stub.emitPluginLine({ name: "example", run: current.run, launch: current.launch, line: JSON.stringify({ id: hello, method: "hello", params: {} }) });
+    await settle();
+    assert.ok(host.replies.some((r) => r.run === current.run && JSON.parse(r.line).id === hello), "the current start's early hello is answered at once");
+    release();
+    await settle();
+    assert.equal(P().processes.example.run, current.run);
+    assert.equal(tabCount(), before);
+    assert.ok(!host.replies.some((r) => JSON.parse(r.line).id === asked), "the retired run never gets an answer");
+  } finally {
+    host.startGate = null;
+    release?.();
+  }
+  assert.equal((await ask("open", { urls: ["https://b.example/current"] }, P().processes.example.run)).result?.ok, true);
   lifecycle.disablePlugin("example");
 });
 
