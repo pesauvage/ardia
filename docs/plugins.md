@@ -77,7 +77,7 @@ and the `ardia` command's plugin commands still install and list files there.
   allowlist, `docs/config.md`), with the same checks, so a plugin can't turn on CLI control, add a search destination
   or change which engine shows a site. When you turn the plugin on, each default that `config.json` doesn't set is
   applied through `updateSettings` and the value it replaced is remembered; turning the plugin off puts that value back
-  unless you changed the setting since. When two plugins set the same setting, turning either off leaves the other's
+  unless you changed the setting since or `config.json` now sets it. When two plugins set the same setting, turning either off leaves the other's
   value or, once both are off, the one from before either. `config.json` always wins. `omniboxProviders` and
   `launchActions` have approvals of their own (`docs/automation.md` › Approvals), so a plugin can't set them.
 - `rows` (at most 20) add rows to the plugin's page in Settings › Plugins: `toggle` (boolean), `text` (up to 200

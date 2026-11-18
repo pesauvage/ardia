@@ -474,3 +474,15 @@ test("defaults unwind in the order they were applied, even when a later plugin s
   lifecycle.disablePlugin("dark");
   assert.deepEqual(S().settings.commandBarStart, original, "and once both are off, the value from before either");
 });
+
+test("turning a plugin off never overwrites what config.json now sets, even to the plugin's own value", async () => {
+  await enabled();
+  assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 5 } });
+  stub.configFolder.files.set("config.json", JSON.stringify({ settings: { commandBarStart: { openTabs: { limit: 5 } } } }));
+  try {
+    lifecycle.disablePlugin("example");
+    assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 5 } }, "config.json's value stays");
+  } finally {
+    stub.configFolder.files.delete("config.json");
+  }
+});

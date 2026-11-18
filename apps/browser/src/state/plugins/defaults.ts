@@ -50,10 +50,10 @@ export function planDefaults(m: PluginManifest, settings: Settings, fileKeys: Re
   return { patch: patch as Partial<Settings>, applied };
 }
 
-export function planRestore(applied: PluginRecord["applied"], settings: Settings, claims: Claims = new Map()): Partial<Settings> {
+export function planRestore(applied: PluginRecord["applied"], settings: Settings, claims: Claims = new Map(), fileKeys: ReadonlySet<string> = new Set()): Partial<Settings> {
   const patch: Record<string, unknown> = {};
   for (const [key, { value, previous, order }] of Object.entries(applied)) {
-    if (!(key in settings)) continue;
+    if (!(key in settings) || fileKeys.has(key)) continue;
     if ((claims.get(key)?.order ?? -1) > order) continue;
     if (sameValue(settings[key as keyof Settings], value)) patch[key] = previous;
   }
@@ -86,6 +86,6 @@ export function applyDefaults(m: PluginManifest, records: Record<string, PluginR
 
 export function restoreDefaults(applied: PluginRecord["applied"], claims: Claims = new Map()) {
   const s = useBrowser.getState();
-  const patch = planRestore(applied, s.settings, claims);
+  const patch = planRestore(applied, s.settings, claims, keysConfigSets());
   if (Object.keys(patch).length) s.updateSettings(patch);
 }
