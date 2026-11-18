@@ -101,7 +101,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   }
 
   static func removeData(_ plugin: String, done: @escaping () -> Void) {
-    WKWebsiteDataStore.remove(forIdentifier: storeIdentifier(plugin)) { _ in done() }
+    PluginPageData.remove(storeIdentifier(plugin)) { _ in done() }
   }
 
   private func rebuild() {
