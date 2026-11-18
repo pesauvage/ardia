@@ -47,7 +47,10 @@ final class PluginSchemeHandler: NSObject, WKURLSchemeHandler {
   private func headers(_ given: [String: String]) -> [String: String] {
     var headers = given
     headers["x-content-type-options"] = "nosniff"
-    if let policy { headers["content-security-policy"] = policy }
+    if let policy {
+      headers["content-security-policy"] = policy
+      headers["x-dns-prefetch-control"] = "off"
+    }
     return headers
   }
 

@@ -331,9 +331,14 @@ whichever profile the tab's window shows:
   reach the interface's JavaScript, the store or any native call, with one exception: `window.ardia.send`, in the main
   frame of the plugin's own documents, which reaches only that plugin's helper, as above. It gets no camera, microphone or location, downloads
   are refused, and its JavaScript dialogs are ignored.
-- **Its network follows the plugin's.** Without `network`, a file page's own requests (scripts, images, `fetch`,
-  WebSockets) may only reach its own origin and this Mac, and it can't start workers: Ardia sends a Content Security
-  Policy in every response header.
+- **Its network follows the plugin's.** Without `network`, the page reaches only its own files: Ardia sends a Content
+  Security Policy in every response header (scripts, images, `fetch`, WebSockets, `EventSource`, beacons, preloads and
+  form posts go only to its own origin; no workers), turns DNS prefetching off, and turns WebRTC off in the page's
+  WebKit settings, so `RTCPeerConnection` doesn't exist and no ICE packet leaves. Each of those was tried from a test
+  page against a listener on this Mac's network address, and none reached it (see the proof in the pull request).
+  WebRTC is switched off through a WebKit preference that isn't public API; on a macOS where it's missing, a page
+  without `network` isn't shown at all rather than shown with WebRTC on. With `network`, a page is a web page like any
+  other.
 - **Stays on its origin.** Its own origin may navigate freely. A link to any other http(s) address that you click
   opens as a new tab in the window's profile (where your cookies apply, as for any link you open), but only within a
   second of a click or key press of yours in that page: a link a script clicks, a pop-up or a `window.open` opens

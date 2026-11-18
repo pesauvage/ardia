@@ -33,7 +33,15 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private let limit = PluginPageMessages.Limit()
 
   static let offlinePolicy =
-    "default-src 'self' ardia-plugin: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ardia-plugin: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; form-action 'self'; worker-src 'none'"
+    "default-src 'self' ardia-plugin: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ardia-plugin:; form-action 'self'; worker-src 'none'"
+
+  static func turnOffPeerConnections(_ preferences: WKPreferences) -> Bool {
+    let selector = NSSelectorFromString("_setPeerConnectionEnabled:")
+    guard preferences.responds(to: selector) else { return false }
+    typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+    unsafeBitCast(preferences.method(for: selector), to: Setter.self)(preferences, selector, false)
+    return true
+  }
 
   private var web: WKWebView?
   private var allowedOrigin: (scheme: String, host: String, port: Int?)?
@@ -70,6 +78,10 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     configuration.userContentController.add(PluginPageMessageBridge(self), contentWorld: .page, name: "ardia")
     configuration.userContentController.addUserScript(pageScript())
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+    if !network && !Self.turnOffPeerConnections(configuration.preferences) {
+      NSLog("[plugins] %@'s page isn't shown: this macOS can't turn WebRTC off for a page without network", plugin)
+      return
+    }
     configuration.mediaTypesRequiringUserActionForPlayback = .all
     let view = WKWebView(frame: bounds, configuration: configuration)
     view.navigationDelegate = self
