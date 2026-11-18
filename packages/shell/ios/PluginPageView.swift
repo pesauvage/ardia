@@ -66,7 +66,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     let configuration = WKWebViewConfiguration()
     configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: Self.storeIdentifier(plugin))
     configuration.setURLSchemeHandler(
-      PluginSchemeHandler(plugin: plugin, folderId: folderId, policy: network ? nil : Self.offlinePolicy), forURLScheme: PluginSchemeHandler.scheme)
+      PluginSchemeHandler(plugin: plugin, folderId: folderId, approved: approved, policy: network ? nil : Self.offlinePolicy), forURLScheme: PluginSchemeHandler.scheme)
     configuration.userContentController.add(PluginPageMessageBridge(self), contentWorld: .page, name: "ardia")
     configuration.userContentController.addUserScript(pageScript())
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false

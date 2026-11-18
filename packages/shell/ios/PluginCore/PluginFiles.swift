@@ -107,6 +107,20 @@ enum PluginFiles {
     return openat(directory, parts.last!, flags | O_NOFOLLOW | O_CLOEXEC)
   }
 
+  static let maxPageFile = 10 << 20
+
+  static func readPageFile(_ path: String, folderId: String, approved: String, relative: String) -> Data? {
+    guard case .success(let folder) = approvedFolder(path, folderId: folderId, approved: approved) else { return nil }
+    defer { folder.close() }
+    let fd = openBeneath(folder.fd, relative, flags: O_RDONLY | O_NONBLOCK)
+    guard fd >= 0 else { return nil }
+    defer { Darwin.close(fd) }
+    var info = stat()
+    guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_size <= maxPageFile else { return nil }
+    let data = FileHandle(fileDescriptor: fd, closeOnDealloc: false).readData(ofLength: maxPageFile + 1)
+    return data.count <= maxPageFile ? data : nil
+  }
+
   static func localProgram(_ relative: String, in folder: OpenedFolder) -> String? {
     let fd = openBeneath(folder.fd, relative, flags: O_RDONLY | O_NONBLOCK)
     guard fd >= 0 else { return nil }

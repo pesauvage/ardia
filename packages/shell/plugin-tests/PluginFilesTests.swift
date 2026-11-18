@@ -176,3 +176,22 @@ final class PluginBeneathTests: XCTestCase {
     XCTAssertEqual(info.st_mode & S_IFMT, S_IFDIR)
   }
 }
+
+final class PluginPageFileTests: XCTestCase {
+  func testAPageFileIsServedOnlyWhileTheApprovedManifestIsInPlace() throws {
+    let made = FileManager.default.temporaryDirectory.appendingPathComponent("plugin-page-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: made.appendingPathComponent("page"), withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: made) }
+    let path = PluginSandbox.resolved(made.path)!
+    let manifest = "{\"name\":\"example\"}"
+    try manifest.write(toFile: "\(path)/plugin.json", atomically: false, encoding: .utf8)
+    try "page".write(toFile: "\(path)/page/index.html", atomically: false, encoding: .utf8)
+    let folder = try XCTUnwrap(PluginFiles.openFolder(path))
+    let id = folder.id
+    folder.close()
+    let approved = PluginFiles.approvalHash(text: manifest, folderId: id)
+    XCTAssertEqual(PluginFiles.readPageFile(path, folderId: id, approved: approved, relative: "page/index.html"), Data("page".utf8))
+    try "{\"name\":\"example\",\"permissions\":[\"network\"]}".write(toFile: "\(path)/plugin.json", atomically: false, encoding: .utf8)
+    XCTAssertNil(PluginFiles.readPageFile(path, folderId: id, approved: approved, relative: "page/index.html"), "an edited manifest stops the page at once")
+  }
+}

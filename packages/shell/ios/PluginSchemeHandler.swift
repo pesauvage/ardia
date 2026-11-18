@@ -4,15 +4,16 @@ import WebKit
 
 final class PluginSchemeHandler: NSObject, WKURLSchemeHandler {
   static let scheme = "ardia-plugin"
-  static let maxFile = 10 << 20
 
   let plugin: String
   let folderId: String
+  let approved: String
   let policy: String?
 
-  init(plugin: String, folderId: String, policy: String?) {
+  init(plugin: String, folderId: String, approved: String, policy: String?) {
     self.plugin = plugin
     self.folderId = folderId
+    self.approved = approved
     self.policy = policy
   }
 
@@ -23,23 +24,10 @@ final class PluginSchemeHandler: NSObject, WKURLSchemeHandler {
     return parts.joined(separator: "/")
   }
 
-  static func read(_ relative: String, inside folder: OpenedFolder) -> Data? {
-    let fd = PluginFiles.openBeneath(folder.fd, relative, flags: O_RDONLY | O_NONBLOCK)
-    guard fd >= 0 else { return nil }
-    defer { close(fd) }
-    var info = stat()
-    guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_size <= maxFile else { return nil }
-    let data = FileHandle(fileDescriptor: fd, closeOnDealloc: false).readData(ofLength: maxFile + 1)
-    return data.count <= maxFile ? data : nil
-  }
-
-
   func contents(of url: URL) -> (path: String, data: Data)? {
     guard let relative = Self.relativePath(of: url, plugin: plugin), let path = PluginFolders.current()?.lexicalFolder(plugin),
-      let folder = PluginFiles.openFolder(path)
+      let data = PluginFiles.readPageFile(path, folderId: folderId, approved: approved, relative: relative)
     else { return nil }
-    defer { folder.close() }
-    guard folder.id == folderId, let data = Self.read(relative, inside: folder) else { return nil }
     return (relative, data)
   }
 

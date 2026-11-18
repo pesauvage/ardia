@@ -111,8 +111,10 @@ names the tab and `icon` its command bar entry. Its content is static files from
 
 - `"file": "page/index.html"`: the page, served as `ardia-plugin://<name>/page/index.html` with everything it loads
   from beside it.
-  Only regular files inside the approved plugin folder are served: each is opened one path component at a time from
-  that opened folder, and a link anywhere in its path is refused. At most 10 MB each, with their type from the
+  Only regular files inside the approved plugin folder are served, and only while that folder still holds the approved
+  `plugin.json`: for every file Ardia opens the folder, checks its identity and the manifest's hash, and opens the file
+  one path component at a time from that same opened folder; a link anywhere in its path is refused. An edited
+  manifest stops the page's files at once, before the folder watcher reacts. At most 10 MB each, with their type from the
   extension; anything else is a 404.
 
 A page tab can have a path, `ardia://<name>/<path>?<query>` (`ardia://ai/history`, `ardia://ai/chats/42`): each path
@@ -133,9 +135,12 @@ never sent to Chrome. A plugin with a page can't take the name of one of Ardia's
 At most 32 items, each up to 1,024 bytes, no NUL. `memoryMB` (64 to 4,096, default 1,024) caps its memory. See
 [The helper](#the-helper).
 
-What the approval pins: a program in the plugin's folder is found through the approved, opened folder (one path
-component at a time, no links), checked to be an executable file, and started as `./bin/helper` from inside that
-folder, so a folder swapped in after the check never runs. An absolute path or a bare name is outside the plugin:
+What the approval pins is the plugin's root folder, not the files in it. A program in the plugin's folder is checked
+through the approved, opened folder (one path component at a time, no links, an executable file) and started as
+`./bin/helper` with that opened folder as its working directory, so a folder swapped in for the approved one never
+runs. The program file itself is looked up again by that path when it starts: whoever can change files inside the
+approved folder can change what runs between the check and the start, as they can change the code at any time; the
+approval covers the manifest's declarations, not the code. An absolute path or a bare name is outside the plugin:
 it is whatever is at that path when the helper starts. The approval names it ("Runs a program in the background:
 /usr/bin/python3 helper.py"), it may not live in Ardia's data or config folder, and beyond that it is trusted as
 installed, like a hook's program in `hooks.json`.
