@@ -582,3 +582,16 @@ test("approving a plugin's changed manifest takes its old default out of the sta
   lifecycle.disablePlugin("second");
   assert.deepEqual(S().settings.commandBarStart, original, "the first manifest's old value never comes back");
 });
+
+test("a plugin named like an Object property gets its own record", async () => {
+  S().hydrate({});
+  for (const name of Object.keys(P().records)) lifecycle.disablePlugin(name);
+  const doc = JSON.parse(FIXTURE);
+  doc.name = "constructor";
+  host.folders = [{ name: "constructor", status: "ok", text: JSON.stringify(doc) }];
+  await lifecycle.rescanPlugins();
+  lifecycle.setPluginValue("constructor", "loud", true);
+  assert.deepEqual(P().records.constructor.applied, {}, "a whole record, not Object's constructor");
+  assert.ok(lifecycle.requestPluginConsent("constructor") && lifecycle.enablePlugin("constructor", P().consent.hash));
+  lifecycle.disablePlugin("constructor");
+});
