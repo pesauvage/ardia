@@ -279,8 +279,22 @@ function CastButton({ windowId, tabId, routes, palette }: { windowId: string; ta
   );
 }
 
-function OverflowButton({ windowId, tabId, hidden, palette, onActivate }: { windowId: string; tabId: string; hidden: InstalledExtension[]; palette: ToolbarPalette; onActivate?: () => void }) {
-  const { ref, measure } = useAnchor(windowId, tabId, "*");
+export function OverflowButton({
+  windowId,
+  tabId,
+  hidden,
+  palette,
+  onActivate,
+  slot = "*",
+}: {
+  windowId: string;
+  tabId: string;
+  hidden: InstalledExtension[];
+  palette: ToolbarPalette;
+  onActivate?: () => void;
+  slot?: string;
+}) {
+  const { ref, measure } = useAnchor(windowId, tabId, slot);
   const onPress = async () => {
     const anchor = await measure();
     const enabled = currentWindowExtensions(windowId);
