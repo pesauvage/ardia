@@ -24,15 +24,15 @@ final class PluginSchemeHandler: NSObject, WKURLSchemeHandler {
   }
 
   static func read(_ relative: String, inside folder: OpenedFolder) -> Data? {
-    let fd = openat(folder.fd, relative, O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW)
+    let fd = PluginFiles.openBeneath(folder.fd, relative, flags: O_RDONLY | O_NONBLOCK)
     guard fd >= 0 else { return nil }
     defer { close(fd) }
     var info = stat()
     guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_size <= maxFile else { return nil }
-    guard let opened = PluginFiles.openedPath(fd), PluginSandbox.isInside(opened, folder.path), opened != folder.path else { return nil }
     let data = FileHandle(fileDescriptor: fd, closeOnDealloc: false).readData(ofLength: maxFile + 1)
     return data.count <= maxFile ? data : nil
   }
+
 
   func contents(of url: URL) -> (path: String, data: Data)? {
     guard let relative = Self.relativePath(of: url, plugin: plugin), let path = PluginFolders.current()?.lexicalFolder(plugin),

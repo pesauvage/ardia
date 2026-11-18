@@ -87,7 +87,8 @@ public class PluginsModule: Module {
 
   private static func revealLog(_ name: String) {
     guard let data = PluginFolders.current()?.dataFolder(name) else { return }
-    let log = URL(fileURLWithPath: (data as NSString).appendingPathComponent("plugin.log"))
+    defer { data.close() }
+    let log = URL(fileURLWithPath: (data.path as NSString).appendingPathComponent("plugin.log"))
     NSWorkspace.shared.activateFileViewerSelecting([log])
   }
 

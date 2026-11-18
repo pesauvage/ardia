@@ -35,20 +35,11 @@ struct PluginFolders {
 
   func dataRoot() -> String { (appData as NSString).appendingPathComponent("PluginData") }
 
-  func dataFolder(_ name: String) -> String? {
+  func dataFolder(_ name: String) -> OpenedFolder? {
     guard Self.isName(name) else { return nil }
     let folder = (dataRoot() as NSString).appendingPathComponent(name)
-    for sub in ["home", "tmp"] {
-      let path = (folder as NSString).appendingPathComponent(sub)
-      do {
-        try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-      } catch {
-        return nil
-      }
-    }
-    var info = stat()
-    guard lstat(folder, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR, info.st_uid == geteuid() else { return nil }
-    return PluginSandbox.resolved(folder)
+    try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    return PluginFiles.openDataFolder(folder)
   }
 
   func list() -> [[String: Any]] {

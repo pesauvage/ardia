@@ -110,8 +110,9 @@ Split View and in tab groups, moves between windows and comes back with the sess
 names the tab and `icon` its command bar entry. The tab's content is one of:
 
 - `"file": "page/index.html"`: a file in the plugin's folder, served as `ardia-plugin://<name>/page/index.html`.
-  Only regular files inside the plugin's folder are served (checked after resolving links), at most 10 MB each, with
-  their type from the extension; anything else is a 404.
+  Only regular files inside the approved plugin folder are served: each is opened one path component at a time from
+  that opened folder, and a link anywhere in its path is refused. At most 10 MB each, with their type from the
+  extension; anything else is a 404.
 - `"served": true`: the helper serves it and tells Ardia where with `page.serve` (below). The URL must be
   `http://127.0.0.1:<port>/…`, `http://localhost:<port>/…` or `http://[::1]:<port>/…`. Until it arrives the tab says the
   plugin is starting. A served page needs the `network` permission: its server's responses (a redirect, a `Link`
@@ -135,6 +136,13 @@ never sent to Chrome. A plugin with a page can't take the name of one of Ardia's
 (`/usr/bin/python3`), or a bare name found on `/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin`.
 At most 32 items, each up to 1,024 bytes, no NUL. `memoryMB` (64 to 4,096, default 1,024) caps its memory. See
 [The helper](#the-helper).
+
+What the approval pins: a program in the plugin's folder is found through the approved, opened folder (one path
+component at a time, no links), checked to be an executable file, and started as `./bin/helper` from inside that
+folder, so a folder swapped in after the check never runs. An absolute path or a bare name is outside the plugin:
+it is whatever is at that path when the helper starts. The approval names it ("Runs a program in the background:
+/usr/bin/python3 helper.py"), it may not live in Ardia's data or config folder, and beyond that it is trusted as
+installed, like a hook's program in `hooks.json`.
 
 ### hooks
 
@@ -225,6 +233,9 @@ settings only once it is saved, so a failed save changes nothing.
   environment is only `PATH` (above), `HOME` (`PluginData/<name>/home`), `TMPDIR` (`PluginData/<name>/tmp`), `LANG`,
   `ARDIA_PLUGIN_NAME`, `ARDIA_PLUGIN_FD=3` and `ARDIA_PLUGIN_PROTOCOL=1`. A sandbox Ardia can't set up means the helper
   doesn't start; it never runs unsandboxed.
+- **Data folder.** `PluginData/<name>` is opened once per start and must be a real folder Ardia's user owns, with
+  `home` and `tmp` real folders in it; the log is created inside that opened folder, never through a link. The
+  helper can write in it, so Ardia never follows anything the helper leaves there.
 - **Sandbox.** It may read and write its `PluginData` folder and read the plugin's folder, the program it runs and that
   program's install folder (the folder above the `bin` it is in, so `/opt/homebrew/opt/node/bin/node` reads its own
   libraries; `/bin/sh` or `~/bin/x` read only themselves, since that folder would be `/` or your home). Your home
@@ -233,7 +244,9 @@ settings only once it is saved, so a failed save changes nothing.
   can't connect to a Unix socket in your home or Ardia's data folder, so Ardia's control socket is out of reach. It
   can't write anywhere else on disk. Without `network` its outbound connections reach only this Mac. A plugin whose
   folder (after links) would take in your home, Ardia's data or its settings, or whose program lives in Ardia's data or
-  config folder, isn't started.
+  config folder, isn't started. The profile's grants are paths, the only kind `sandbox-exec` has: they name the
+  approved folder's path at start. A folder put in its place afterwards can be read by the running helper instead
+  of its own, and nothing outside the plugins folder can.
 - **What the sandbox doesn't do.** It runs as you, so it is a containment layer around a program you chose to run, not
   a defense against one built to escape. Known gaps: Apple Events aren't blocked (`appleevent-send` isn't enforced for
   a default-allow profile), so a helper could script an app that accepts them, Ardia's own AppleScript included, which

@@ -93,20 +93,61 @@ enum PluginFiles {
     return .success(folder)
   }
 
-  static func openLog(_ folder: String) -> Int32 {
-    let path = (folder as NSString).appendingPathComponent("plugin.log")
-    var info = stat()
-    if lstat(path, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_size > logLimit {
-      rename(path, path + ".1")
+  static func openBeneath(_ folder: Int32, _ relative: String, flags: Int32) -> Int32 {
+    let parts = relative.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+    guard !parts.isEmpty, parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("\0") }) else { return -1 }
+    var directory = folder
+    defer { if directory != folder { Darwin.close(directory) } }
+    for part in parts.dropLast() {
+      let next = openat(directory, part, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+      guard next >= 0 else { return -1 }
+      if directory != folder { Darwin.close(directory) }
+      directory = next
     }
-    let fd = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK, 0o600)
+    return openat(directory, parts.last!, flags | O_NOFOLLOW | O_CLOEXEC)
+  }
+
+  static func localProgram(_ relative: String, in folder: OpenedFolder) -> String? {
+    let fd = openBeneath(folder.fd, relative, flags: O_RDONLY | O_NONBLOCK)
+    guard fd >= 0 else { return nil }
+    defer { Darwin.close(fd) }
+    var info = stat()
+    guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_mode & 0o111 != 0 else { return nil }
+    return "./" + relative
+  }
+
+  static func openDataFolder(_ path: String) -> OpenedFolder? {
+    let fd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+    guard fd >= 0 else { return nil }
+    var info = stat()
+    guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFDIR, info.st_uid == geteuid(), let real = openedPath(fd) else {
+      Darwin.close(fd)
+      return nil
+    }
+    for sub in ["home", "tmp"] {
+      var made = stat()
+      if mkdirat(fd, sub, 0o700) != 0 && errno != EEXIST || fstatat(fd, sub, &made, AT_SYMLINK_NOFOLLOW) != 0 || (made.st_mode & S_IFMT) != S_IFDIR {
+        Darwin.close(fd)
+        return nil
+      }
+    }
+    return OpenedFolder(fd: fd, path: real, id: "\(info.st_dev):\(info.st_ino)")
+  }
+
+  static func openLog(in folder: OpenedFolder) -> Int32 {
+    var info = stat()
+    if fstatat(folder.fd, "plugin.log", &info, AT_SYMLINK_NOFOLLOW) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_size > logLimit {
+      renameat(folder.fd, "plugin.log", folder.fd, "plugin.log.1")
+    }
+    let fd = openat(folder.fd, "plugin.log", O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK, 0o600)
     guard fd >= 0 else { return -1 }
     guard fstat(fd, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG else {
-      close(fd)
+      Darwin.close(fd)
       errno = EFTYPE
       return -1
     }
     _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK)
     return fd
   }
+
 }

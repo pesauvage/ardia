@@ -75,10 +75,14 @@ final class PluginProcess: PluginRun {
     }
     defer { folder.close() }
     let pluginFolder = folder.path
-    guard let data = folders.dataFolder(spec.name) else { return .failure(.refused("its data folder couldn't be made")) }
-    guard let first = spec.run.first, let program = PluginSandbox.program(first, pluginFolder: pluginFolder) else {
-      return .failure(.refused("\(spec.run.first ?? "") wasn't found"))
-    }
+    guard let dataFolder = folders.dataFolder(spec.name) else { return .failure(.refused("its data folder couldn't be made")) }
+    defer { dataFolder.close() }
+    let data = dataFolder.path
+    guard let first = spec.run.first else { return .failure(.refused("it names no program")) }
+    let isLocal = !first.hasPrefix("/") && first.contains("/")
+    let launched = isLocal ? PluginFiles.localProgram(first, in: folder) : PluginSandbox.program(first, pluginFolder: pluginFolder)
+    guard let launched else { return .failure(.refused("\(first) wasn't found, or isn't a program file inside the plugin's folder")) }
+    let program = isLocal ? (pluginFolder as NSString).appendingPathComponent(first) : launched
     let sandbox = PluginSandbox(
       home: PluginSandbox.resolved(NSHomeDirectory()) ?? NSHomeDirectory(), appData: folders.appData, configFolder: folders.config,
       pluginFolder: pluginFolder, pluginData: data, program: program, network: spec.network)
@@ -96,7 +100,7 @@ final class PluginProcess: PluginRun {
     var noSigPipe: Int32 = 1
     setsockopt(pair[0], SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
     _ = fcntl(pair[0], F_SETFL, fcntl(pair[0], F_GETFL) | O_NONBLOCK)
-    let log = PluginFiles.openLog(data)
+    let log = PluginFiles.openLog(in: dataFolder)
     defer { Darwin.close(pair[1]) }
     guard log >= 0 else {
       Darwin.close(pair[0])
@@ -110,11 +114,18 @@ final class PluginProcess: PluginRun {
       posix_spawn_file_actions_destroy(&actions)
       posix_spawnattr_destroy(&attributes)
     }
-    posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0)
-    posix_spawn_file_actions_adddup2(&actions, log, 1)
-    posix_spawn_file_actions_adddup2(&actions, log, 2)
-    posix_spawn_file_actions_adddup2(&actions, pair[1], channelFd)
-    posix_spawn_file_actions_addfchdir_np(&actions, folder.fd)
+    let actionResults = [
+      posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0),
+      posix_spawn_file_actions_adddup2(&actions, log, 1),
+      posix_spawn_file_actions_adddup2(&actions, log, 2),
+      posix_spawn_file_actions_adddup2(&actions, pair[1], channelFd),
+      posix_spawn_file_actions_addfchdir_np(&actions, folder.fd),
+    ]
+    if let failed = actionResults.first(where: { $0 != 0 }) {
+      Darwin.close(pair[0])
+      Darwin.close(log)
+      return .failure(.refused("it couldn't be set up to start (\(errnoText(failed)))"))
+    }
     var none = sigset_t()
     var all = sigset_t()
     sigemptyset(&none)
@@ -124,7 +135,7 @@ final class PluginProcess: PluginRun {
     posix_spawnattr_setpgroup(&attributes, 0)
     _ = PluginProcessTree.disclaim(&attributes)
     posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF))
-    let argv = ["/usr/bin/sandbox-exec"] + sandboxArguments + [program] + spec.run.dropFirst()
+    let argv = ["/usr/bin/sandbox-exec"] + sandboxArguments + [launched] + spec.run.dropFirst()
     let env = environment(name: spec.name, data: data)
     var pid: pid_t = 0
     let result = withCStrings(argv) { cArgv in withCStrings(env) { cEnv in posix_spawn(&pid, "/usr/bin/sandbox-exec", &actions, &attributes, cArgv, cEnv) } }
