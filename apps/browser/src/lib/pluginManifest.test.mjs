@@ -114,6 +114,9 @@ test("names, titles and the program are checked", () => {
 });
 
 test("versions compare by number, a prerelease before its release", () => {
+  assert.ok(compareVersions("0.2.50-nightly.10", "0.2.50-nightly.9") > 0, "nightly.10 comes after nightly.9");
+  assert.ok(compareVersions("1.0.0-alpha", "1.0.0-alpha.1") < 0, "fewer identifiers come first");
+  assert.ok(compareVersions("1.0.0-1", "1.0.0-alpha") < 0, "numbers before words");
   assert.ok(compareVersions("0.2.50", "0.2.46-nightly.4") > 0);
   assert.ok(compareVersions("0.2.46-nightly.4", "0.2.46") < 0);
   assert.equal(compareVersions("1.0.0", "1.0.0"), 0);

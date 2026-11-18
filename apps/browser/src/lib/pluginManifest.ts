@@ -2,6 +2,8 @@ import { isFields, type Fields } from "./decode";
 import { upgraded, type Migrations } from "./savedDocument";
 import { isPagePath, RESERVED_PAGE_NAMES } from "./pluginNames";
 
+export { compareVersions } from "./versions";
+
 export const MANIFEST_VERSION = 1;
 export const MANIFEST_FILE = "plugin.json";
 
@@ -355,20 +357,6 @@ export function readManifest(text: string): ManifestRead {
   if (!current) return { manifest: null, problems: [`${MANIFEST_FILE} couldn't be read`], newer: false };
   const { manifest, problems } = checkManifest(current);
   return { manifest, problems: problems.map((p) => `${MANIFEST_FILE}: ${p}`), newer: false };
-}
-
-export function compareVersions(a: string, b: string): number {
-  const parse = (v: string) => {
-    const [core, pre = ""] = v.split(/-(.*)/s, 2);
-    return { parts: core!.split(".").map(Number), pre };
-  };
-  const x = parse(a);
-  const y = parse(b);
-  for (let i = 0; i < 3; i++) if (x.parts[i] !== y.parts[i]) return (x.parts[i] ?? 0) - (y.parts[i] ?? 0);
-  if (x.pre === y.pre) return 0;
-  if (!x.pre) return 1;
-  if (!y.pre) return -1;
-  return x.pre < y.pre ? -1 : 1;
 }
 
 export type Contribution = "settings" | "commands" | "page" | "process" | "hooks" | "tools";
