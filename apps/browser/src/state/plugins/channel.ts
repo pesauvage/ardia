@@ -58,11 +58,16 @@ function subscribe(c: Connection, m: PluginManifest, params: Record<string, unkn
   return { result: { ok: true } };
 }
 
-function servePage(name: string, m: PluginManifest, params: Record<string, unknown>): Body {
+function pageTokenOf(name: string, run: number): string {
+  const state = usePlugins.getState().processes[name];
+  return state?.state === "running" && state.run === run ? (state.pageToken ?? "") : "";
+}
+
+function servePage(name: string, run: number, m: PluginManifest, params: Record<string, unknown>): Body {
   if (!m.page || !("served" in m.page.source)) return failure("refused", "This plugin's page isn't served by its helper.");
   if (typeof params.url !== "string" || !isLoopbackPageUrl(params.url)) return failure("bad_request", "page.serve needs an http URL on 127.0.0.1, localhost or [::1] with a port.");
   usePlugins.setState((s) => ({ servedUrls: { ...s.servedUrls, [name]: params.url as string } }));
-  return { result: { ok: true } };
+  return { result: { ok: true, pageToken: pageTokenOf(name, run) } };
 }
 
 function openPage(name: string, m: PluginManifest, params: Record<string, unknown>): Body {
@@ -90,7 +95,7 @@ async function toolsCall(name: string, m: PluginManifest, params: Record<string,
 function answer(c: Connection, m: PluginManifest, method: string, params: Record<string, unknown>): Body | Promise<Body> {
   switch (method) {
     case "hello":
-      return { result: { app: "Ardia", version: systemInfo().appVersion, protocol: CHANNEL_PROTOCOL, plugin: c.name, values: valuesFor(c.name) } };
+      return { result: { app: "Ardia", version: systemInfo().appVersion, protocol: CHANNEL_PROTOCOL, plugin: c.name, values: valuesFor(c.name), pageToken: pageTokenOf(c.name, c.run) } };
     case "values":
       return { result: valuesFor(c.name) };
     case "subscribe":
@@ -100,7 +105,7 @@ function answer(c: Connection, m: PluginManifest, method: string, params: Record
     case "run":
       return has(m, "commands") ? runMethod(params) : failure("refused", "run needs the commands permission.");
     case "page.serve":
-      return servePage(c.name, m, params);
+      return servePage(c.name, c.run, m, params);
     case "page.open":
       return openPage(c.name, m, params);
     case "tools.call":

@@ -68,7 +68,7 @@ final class PluginHost {
       switch result {
       case .success(let process):
         processes[spec.name] = process
-        done(["ok": true, "run": process.run, "pid": Int(process.pid)])
+        done(["ok": true, "run": process.run, "pid": Int(process.pid), "pageToken": PluginPageProof.randomHex()])
       case .failure(let failure):
         NSLog("[plugins] %@ didn't start: %@", spec.name, failure.reason)
         done(["ok": false, "reason": failure.reason])

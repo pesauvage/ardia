@@ -116,6 +116,8 @@ names the tab and `icon` its command bar entry. The tab's content is one of:
   `http://127.0.0.1:<port>/…`, `http://localhost:<port>/…` or `http://[::1]:<port>/…`. Until it arrives the tab says the
   plugin is starting. A served page needs the `network` permission: its server's responses (a redirect, a `Link`
   preload header) start requests before any policy in the page can apply, so Ardia can't hold it to this Mac.
+  A loopback address doesn't say who is listening on it, so the server must prove it is this run of the helper
+  ([Served pages](#served-pages)).
 
 A page tab can have a path, `ardia://<name>/<path>?<query>` (`ardia://ai/history`, `ardia://ai/chats/42`): each path
 is its own tab, and opening one that's already open in the window goes to it. A file page gets the path and query as
@@ -248,12 +250,12 @@ Requests from the helper (`{"id", "method", "params"}`):
 
 | Method | Needs | Result |
 | --- | --- | --- |
-| `hello` | | `{"app", "version", "protocol": 1, "plugin", "values"}`: `values` are the row values |
+| `hello` | | `{"app", "version", "protocol": 1, "plugin", "values", "pageToken"}`: `values` are the row values, `pageToken` this run's page token ([Served pages](#served-pages)) |
 | `values` | | the row values |
 | `subscribe` `{"events", "idle"?}` | the events in `hooks` | `{"ok": true}`; then `{"event", "time", "data"}` lines as on the socket; `["*"]` means every event in `hooks` |
 | `windows` | `tabs` | as on the socket |
 | `run` `{"command", "arg"?, "window"?, "tab"?}` | `commands` | as on the socket |
-| `page.serve` `{"url"}` | `page.served` | `{"ok": true}`; open page tabs load it |
+| `page.serve` `{"url"}` | `page.served` | `{"ok": true, "pageToken"}`; open page tabs load it once its server proves itself |
 | `page.open` `{"path"?, "split"?, "side"?, "context"?}` | a `page`; `context` needs `tabs` | `{"tabId", "windowId"}`: opens the plugin's page at that path in the last focused window, as a tab or in Split View beside the current tab |
 | `tools.call` `{"plugin", "tool", "input"?}` | every permission the other plugin has | the tool's result, or its error; the plugin must be on and running. A plugin can't reach through another plugin's tools to what it wasn't granted itself |
 | `result` `{"call", "result"? , "error"?}` | | `{"ok": true}`: the answer to a call (below) |
@@ -263,6 +265,24 @@ row, plus the subscribed events. Calls to a tool arrive as `{"call": "c4", "tool
 "caller": {"kind": "command" | "cli" | "plugin", "plugin"?}, "deadline": ms}`; the helper answers with `result`. A
 call past its deadline is answered with an error for the caller and `{"call": "c4", "cancel": true}` is sent; a late
 `result` is `bad_request`. At most 16 calls wait per helper.
+
+### Served pages
+
+Each run of a helper gets a page token, 64 hex characters from Ardia, in `hello` and `page.serve`'s results. It
+binds the page's loopback server to that run:
+
+- **The server proves itself before every load.** Before a page tab loads the served URL (and with it any context a
+  command hands the page), Ardia asks `GET <origin>/.well-known/ardia-plugin-proof?nonce=<64 hex>` with no cookies,
+  following no redirect, and the server must answer 200 with the lowercase hex HMAC-SHA256 of the nonce, keyed with
+  the page token. Anything else (another process on that port, an old run's server, a redirect) and the tab says the
+  page didn't load; nothing is sent to it.
+- **Ardia's requests carry the token.** The page's own website data store holds an HttpOnly, SameSite=Strict cookie
+  `ardia_page_token=<page token>` for the server's host, so every request the page makes carries it. Websites in
+  Chrome, other plugins' pages and other programs don't have it: the server should refuse any request without it
+  (the proof request aside).
+- What it doesn't cover: cookies don't separate ports, so the page's own requests to another loopback port carry the
+  token too; and once a page has loaded, a process that takes over the port afterwards (bind `127.0.0.1` exactly,
+  not every address, and keep the socket for the whole run) gets the page's later requests.
 
 ## The page
 

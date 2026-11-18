@@ -10,7 +10,7 @@ export type PluginListing = {
 };
 
 export type ProcessState =
-  | { state: "starting" | "running"; run: number; since: number }
+  | { state: "starting" | "running"; run: number; since: number; pageToken?: string }
   | { state: "waiting"; until: number; failures: number }
   | { state: "crashed"; reason: string }
   | { state: "exited" }

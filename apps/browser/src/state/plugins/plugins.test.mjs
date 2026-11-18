@@ -517,3 +517,17 @@ test("removing a plugin waits for its helper to stop before deleting its files",
     host.stopGate = null;
   }
 });
+
+test("a served page's helper gets this run's page token, which the page view makes its server prove", async () => {
+  const served = JSON.parse(FIXTURE);
+  served.page = { title: "Served", served: true };
+  served.permissions.push("network");
+  await install(JSON.stringify(served));
+  assert.ok(lifecycle.requestPluginConsent("example") && lifecycle.enablePlugin("example", P().consent.hash));
+  await settle();
+  const { run, pageToken } = P().processes.example;
+  assert.match(pageToken, /^[0-9a-f]{64}$/);
+  assert.equal((await ask("hello", {}, run)).result.pageToken, pageToken);
+  assert.deepEqual((await ask("page.serve", { url: "http://127.0.0.1:4321/" }, run)).result, { ok: true, pageToken });
+  lifecycle.disablePlugin("example");
+});

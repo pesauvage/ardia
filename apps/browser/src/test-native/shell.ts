@@ -439,7 +439,8 @@ const plugins: Modules["ArdiaPlugins"] = {
   start: async (spec) => {
     pluginHost.starts.push({ ...spec, run: [...spec.run] });
     if (pluginHost.startResult) return pluginHost.startResult;
-    return { ok: true, run: ++pluginHost.nextRun, pid: 1000 + pluginHost.nextRun };
+    const run = ++pluginHost.nextRun;
+    return { ok: true, run, pid: 1000 + run, pageToken: run.toString(16).padStart(64, "0") };
   },
   stop: async (name, run, graceMs) => {
     pluginHost.stops.push({ name, run, graceMs });

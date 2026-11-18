@@ -9,17 +9,20 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
 
   let onOpenUrl = EventDispatcher()
   let onLoaded = EventDispatcher()
+  let onRefused = EventDispatcher()
 
   var plugin = "" { didSet { if plugin != oldValue { rebuild() } } }
   var url = "" { didSet { if url != oldValue { load() } } }
   var network = false { didSet { if network != oldValue { rebuild() } } }
   var folderId = "" { didSet { if folderId != oldValue { rebuild() } } }
+  var pageToken = "" { didSet { if pageToken != oldValue { load() } } }
 
   static let offlinePolicy =
     "default-src 'self' ardia-plugin: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ardia-plugin: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; form-action 'self'; worker-src 'none'"
 
   private var web: WKWebView?
   private var allowedOrigin: (scheme: String, host: String, port: Int?)?
+  private var loads = 0
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -84,8 +87,36 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     let isPage = origin.scheme == PluginSchemeHandler.scheme && origin.host == plugin
     let isLoopback = origin.scheme == "http" && ["127.0.0.1", "localhost", "::1", "[::1]"].contains(origin.host) && origin.port != nil
     guard isPage || (isLoopback && network) else { return }
-    allowedOrigin = origin
-    web.load(URLRequest(url: target))
+    loads += 1
+    let attempt = loads
+    allowedOrigin = nil
+    if isPage {
+      allowedOrigin = origin
+      web.load(URLRequest(url: target))
+      return
+    }
+    let token = pageToken
+    guard !token.isEmpty else { return }
+    let shown = url
+    PluginPageProof.verify(target, token: token) { [weak self] proven in
+      DispatchQueue.main.async {
+        guard let self, self.loads == attempt, let web = self.web else { return }
+        guard proven, let cookie = Self.tokenCookie(token, for: target) else { return self.onRefused(["url": shown]) }
+        web.configuration.websiteDataStore.httpCookieStore.setCookie(cookie) { [weak self] in
+          guard let self, self.loads == attempt else { return }
+          self.allowedOrigin = origin
+          web.load(URLRequest(url: target))
+        }
+      }
+    }
+  }
+
+  private static func tokenCookie(_ token: String, for target: URL) -> HTTPCookie? {
+    guard let host = target.host else { return nil }
+    return HTTPCookie(properties: [
+      .name: PluginPageProof.cookie, .value: token, .domain: host, .path: "/", .sameSitePolicy: HTTPCookieStringPolicy.sameSiteStrict,
+      HTTPCookiePropertyKey("HttpOnly"): "TRUE",
+    ])
   }
 
   func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
