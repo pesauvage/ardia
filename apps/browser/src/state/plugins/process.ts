@@ -11,7 +11,6 @@ export const STOP_GRACE_MS = 3000;
 type Supervised = { hash: string; folderId: string; manifest: PluginManifest; failures: number[]; timer: ReturnType<typeof setTimeout> | null; token: number };
 
 const supervised = new Map<string, Supervised>();
-const stopping = new Map<string, Promise<void>>();
 const stopListeners = new Set<(name: string) => void>();
 let tokens = 0;
 let highestRun = 0;
@@ -77,15 +76,8 @@ export function stopProcess(name: string, graceMs = STOP_GRACE_MS) {
   if (entry.timer) clearTimeout(entry.timer);
   setProcess(name, null);
   stopped(name);
-  const done: Promise<void> = stopPluginProcess(name, 0, graceMs)
-    .catch((error: unknown) => console.warn(`[plugins] couldn't stop ${name}`, error))
-    .finally(() => {
-      if (stopping.get(name) === done) stopping.delete(name);
-    });
-  stopping.set(name, done);
+  void stopPluginProcess(name, 0, graceMs).catch((error: unknown) => console.warn(`[plugins] couldn't stop ${name}`, error));
 }
-
-export const processStopped = (name: string): Promise<void> => stopping.get(name) ?? Promise.resolve();
 
 export function restartProcess(name: string) {
   const entry = supervised.get(name);

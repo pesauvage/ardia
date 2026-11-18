@@ -502,22 +502,6 @@ test("two quick restarts start the helper once", async () => {
   lifecycle.disablePlugin("example");
 });
 
-test("removing a plugin waits for its helper to stop before deleting its files", async () => {
-  await enabled();
-  let release;
-  host.stopGate = new Promise((resolve) => (release = resolve));
-  try {
-    const removing = lifecycle.removePlugin("example");
-    await settle();
-    assert.deepEqual(host.removed, [], "nothing is deleted while the helper is still stopping");
-    release();
-    assert.deepEqual(await removing, { ok: true });
-    assert.deepEqual(host.removed, ["example"]);
-  } finally {
-    host.stopGate = null;
-  }
-});
-
 test("a served page's helper gets this run's page token, which the page view makes its server prove", async () => {
   const served = JSON.parse(FIXTURE);
   served.page = { title: "Served", served: true };

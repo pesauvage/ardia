@@ -8,7 +8,7 @@ import { listingOf } from "./appChecks";
 import { applySettingsPatch, planDisable, planEnable, spliceApplied } from "./defaults";
 import { writePluginRecords } from "./savedState";
 import { activeManifest, currentPlugins, NO_RECORD, recordOf, usePlugins, type PluginListing, type PluginRecord } from "./store";
-import { processStopped, stopProcess, superviseProcess, supervisedNames } from "./process";
+import { stopProcess, superviseProcess, supervisedNames } from "./process";
 import { dropCalls } from "./tools";
 import { sendValues } from "./channel";
 
@@ -141,7 +141,6 @@ export async function removePlugin(name: string): Promise<{ ok: boolean; reason?
   if (!disablePlugin(name)) return { ok: false, reason: "It couldn't be turned off, because plugins.json couldn't be saved." };
   removing.add(name);
   try {
-    await processStopped(name);
     const removed = await removePluginFiles(name).catch((error: unknown) => ({ ok: false as const, reason: String(error) }));
     if (!removed.ok) return removed;
     updateRecord(name, () => null);

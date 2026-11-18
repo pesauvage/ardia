@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-final class PluginProcess {
+final class PluginProcess: PluginRun {
   static let channelFd: Int32 = 3
   static let memoryCheckInterval: TimeInterval = 10
 

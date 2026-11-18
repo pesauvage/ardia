@@ -202,7 +202,9 @@ settings only once it is saved, so a failed save changes nothing.
 
 - **Starts** when the plugin is turned on, at launch for plugins that are on (after the first window), and when you
   press Restart. **Stops** when it is turned off, removed, its manifest changes, or Ardia quits: Ardia closes its
-  channel, sends SIGTERM to the helper's processes and SIGKILL 3 s later (at quit, after 1 s). The helper's processes
+  channel, sends SIGTERM to the helper's processes and SIGKILL 3 s later (at quit, after 1 s). A start, a restart and a
+  removal first wait until every earlier run of the plugin has exited, its grace period included, so two runs never
+  overlap. The helper's processes
   are its process group plus every descendant, found from the process table just before each signal and remembered
   every 10 s with their start times, so a child that started its own session (`setsid`, Node's `detached`) or was
   orphaned when its parent exited still goes, and a reused process id is never signalled. When the helper exits on
