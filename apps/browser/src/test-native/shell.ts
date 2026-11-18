@@ -428,6 +428,7 @@ export const pluginHost = {
   removed: [] as string[],
   startResult: null as null | { ok: false; reason: string },
   removeGate: null as null | Promise<void>,
+  stopGate: null as null | Promise<void>,
   nextRun: 0,
 };
 const pluginEvents = nativeEvents();
@@ -442,7 +443,7 @@ const plugins: Modules["ArdiaPlugins"] = {
     const run = ++pluginHost.nextRun;
     return { ok: true, run, pid: 1000 + run };
   },
-  stop: async (name, run, graceMs) => void pluginHost.stops.push({ name, run, graceMs }),
+  stop: async (name, run, graceMs) => void (pluginHost.stops.push({ name, run, graceMs }), await pluginHost.stopGate),
   reply: (name, run, line) => void pluginHost.replies.push({ name, run, line }),
   event: (name, run, line) => void pluginHost.events.push({ name, run, line }),
   call: (name, run, line) => void pluginHost.events.push({ name, run, line }),

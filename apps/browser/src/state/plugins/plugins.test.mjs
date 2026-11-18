@@ -17,6 +17,7 @@ const { takePluginCounts } = await import("../telemetry/pluginCounts.ts");
 const { consentLines } = await import("./consent.ts");
 const { useToasts } = await import("../app/toasts.ts");
 const { setConsentPeriod } = await import("../telemetry/consentPeriod.ts");
+const { setQuitting } = await import("../app/quit.ts");
 setConsentPeriod(true, "plugins-test");
 
 const FIXTURE = readFileSync(new URL("../../../../../tests/fixtures/plugins/example/plugin.json", import.meta.url), "utf8");
@@ -672,6 +673,72 @@ test("open answers only with whether it worked and the tabs it created", async (
   const reply = await ask("open", { urls: ["https://b.example/one"] }, run);
   const created = Object.values(S().tabs).filter((t) => t.url === "https://b.example/one").map((t) => t.id);
   assert.deepEqual(reply.result, { ok: true, tabs: created }, "no snapshots, no other tab's id or URL");
+  lifecycle.disablePlugin("example");
+});
+
+async function withPendingStop(run) {
+  let release;
+  host.stopGate = new Promise((resolve) => (release = resolve));
+  try {
+    return await run();
+  } finally {
+    release();
+    host.stopGate = null;
+    await settle();
+  }
+}
+
+const tabCount = () => Object.keys(S().tabs).length;
+
+test("Restart stops accepting the retiring run before it asks for the stop, so a queued open never runs", async () => {
+  const run = await enabled();
+  S().createWindow({ url: "https://a.example/" });
+  const before = tabCount();
+  await withPendingStop(async () => {
+    helper("open", { urls: ["https://b.example/queued"] }, run);
+    restartProcess("example");
+    assert.ok(host.stops.length > 0, "the native stop was asked for");
+    assert.notEqual(P().processes.example.state, "running", "the retiring run isn't the running one while its stop is pending");
+    await settle();
+    helper("open", { urls: ["https://b.example/after"] }, run);
+    await settle();
+    assert.equal(tabCount(), before, "neither the queued open nor a later one from the retiring run opened a tab");
+  });
+  assert.equal(P().processes.example.state, "running");
+  assert.notEqual(P().processes.example.run, run);
+  lifecycle.disablePlugin("example");
+});
+
+test("turning off and removing stop accepting the run before the native stop finishes", async () => {
+  for (const end of [() => lifecycle.disablePlugin("example"), () => void lifecycle.removePlugin("example")]) {
+    const run = await enabled();
+    S().createWindow({ url: "https://a.example/" });
+    const before = tabCount();
+    await withPendingStop(async () => {
+      helper("open", { urls: ["https://b.example/queued"] }, run);
+      end();
+      await settle();
+      helper("open", { urls: ["https://b.example/after"] }, run);
+      await settle();
+      assert.equal(tabCount(), before);
+    });
+  }
+  host.folders = [];
+});
+
+test("while Ardia is quitting no helper request is taken, and a cancelled quit takes them again", async () => {
+  const run = await enabled();
+  S().createWindow({ url: "https://a.example/" });
+  const before = tabCount();
+  setQuitting(true);
+  try {
+    helper("open", { urls: ["https://b.example/quitting"] }, run);
+    await settle();
+    assert.equal(tabCount(), before);
+  } finally {
+    setQuitting(false);
+  }
+  assert.equal((await ask("open", { urls: ["https://b.example/cancelled"] }, run)).result?.ok, true);
   lifecycle.disablePlugin("example");
 });
 

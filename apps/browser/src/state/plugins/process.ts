@@ -3,6 +3,7 @@ import { startPluginProcess, stopPluginProcess, type PluginExit } from "../../pl
 import { notePlugin } from "../telemetry/pluginCounts";
 import { consentNow, consentToken, type ConsentToken } from "../telemetry/choice";
 import { warnFor } from "../telemetry/consoleConsent";
+import { isQuitting } from "../app/quit";
 import { usePlugins, type ProcessState } from "./store";
 
 export const RESTART_DELAYS_MS = [1000, 2000, 4000, 8000, 16000];
@@ -18,7 +19,7 @@ let tokens = 0;
 let highestRun = 0;
 
 export function acceptsRun(name: string, run: number): boolean {
-  if (!supervised.has(name)) return false;
+  if (isQuitting() || !supervised.has(name)) return false;
   const state = usePlugins.getState().processes[name];
   if (state?.state === "running") return run === state.run;
   return state?.state === "starting" && run > highestRun;
@@ -89,6 +90,7 @@ export function restartProcess(name: string) {
   entry.timer = null;
   entry.failures = [];
   const token = (entry.token = ++tokens);
+  setProcess(name, { state: "starting", run: 0, since: Date.now() });
   stopped(name);
   void stopPluginProcess(name, 0, STOP_GRACE_MS).then(() => {
     if (supervised.get(name) === entry && entry.token === token) void launch(name, entry, consent);
