@@ -141,6 +141,13 @@ class PluginsCliTest(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertNotIn("plugins.disable", [c.args[1] for c in call.call_args_list], "nothing is turned off before the new copy passes")
 
+    def test_check_reports_an_installed_folder_whose_name_differs_from_its_manifest(self):
+        folder = self.data / "config" / "plugins" / "renamed"
+        shutil.copytree(EXAMPLE, folder)
+        status, out, _ = self.ardia("check", "renamed")
+        self.assertEqual(status, 1)
+        self.assertIn("but its folder is renamed", out)
+
     def test_list_and_remove_work_from_the_files_when_ardia_is_away(self):
         self.ardia("install", str(EXAMPLE))
         status, out, _ = self.ardia("list", "--json")

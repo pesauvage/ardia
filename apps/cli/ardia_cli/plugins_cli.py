@@ -396,7 +396,8 @@ def cmd_install(args) -> int:
 
 def cmd_check(args) -> int:
     targets = []
-    if args.target and ("/" in args.target or args.target.endswith(".json")):
+    installed = not (args.target and ("/" in args.target or args.target.endswith(".json")))
+    if not installed:
         targets = [Path(args.target).expanduser()]
     elif args.target:
         targets = [plugins_folder(args) / args.target]
@@ -406,7 +407,10 @@ def cmd_check(args) -> int:
     report = []
     for target in targets:
         try:
-            problems = manifest_problems(args, read_manifest(target))
+            manifest = read_manifest(target)
+            problems = manifest_problems(args, manifest)
+            if installed and manifest.get("name") != target.name:
+                problems.append(f"name is {manifest.get('name')}, but its folder is {target.name}")
         except (config_files.ConfigError, OSError) as error:
             problems = [str(error)]
         report.append({"file": str(target), "problems": problems})
