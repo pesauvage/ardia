@@ -9,7 +9,7 @@ import { usePageEngine } from "../../state/engines/hooks";
 
 export const DEVELOPER_BUTTON_ROW = { flexDirection: "row", alignItems: "center" } as const;
 
-export function DeveloperToolsButtons({ tabId, palette, look, onFocus }: { tabId: string; palette: ToolbarPalette; look: "row" | "field"; onFocus?: () => void }) {
+export function DeveloperToolsButtons({ tabId, palette, look, onFocus, glyph }: { tabId: string; palette: ToolbarPalette; look: "row" | "field"; onFocus?: () => void; glyph?: number }) {
   const consoleHint = useShortcutHint("javaScriptConsole");
   const inspectHint = useShortcutHint("inspectElements");
   const engine = usePageEngine(tabId);
@@ -21,8 +21,8 @@ export function DeveloperToolsButtons({ tabId, palette, look, onFocus }: { tabId
   };
   return (
     <View style={DEVELOPER_BUTTON_ROW}>
-      <Button variant="icon" toolbar palette={palette} asset={DEVELOPER_ICONS.console} look={look} onPress={open("console")} tooltip={withShortcut("Toggle Console", consoleHint)} />
-      <Button variant="icon" toolbar palette={palette} asset={DEVELOPER_ICONS.inspect} look={look} onPress={open("inspect")} tooltip={withShortcut("Inspect Element", inspectHint)} />
+      <Button variant="icon" toolbar palette={palette} asset={DEVELOPER_ICONS.console} glyph={glyph} look={look} onPress={open("console")} tooltip={withShortcut("Toggle Console", consoleHint)} />
+      <Button variant="icon" toolbar palette={palette} asset={DEVELOPER_ICONS.inspect} glyph={glyph} look={look} onPress={open("inspect")} tooltip={withShortcut("Inspect Element", inspectHint)} />
     </View>
   );
 }

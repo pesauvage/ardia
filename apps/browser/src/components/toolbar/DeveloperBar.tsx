@@ -48,12 +48,13 @@ export const DeveloperBar = memo(function DeveloperBar({ tabId, windowId }: { ta
           <Image source={STRIPES[ink]} resizeMode="repeat" style={{ flex: 1, width: undefined, height: undefined }} />
         </View>
         <WindowDragRegion style={StyleSheet.absoluteFill} />
-        <View pointerEvents="box-none" style={{ flex: 1, flexDirection: "row", alignItems: "center", paddingHorizontal: DEVELOPER_BAR.edge }}>
+        <View pointerEvents="box-none" style={{ flex: 1, flexDirection: "row", alignItems: "center", paddingLeft: DEVELOPER_BAR.leadingEdge, paddingRight: DEVELOPER_BAR.trailingEdge }}>
           <Button
             variant="icon"
             toolbar
             palette={palette}
             asset={DEVELOPER_ICONS.info}
+            glyph={DEVELOPER_BAR.glyph}
             look="row"
             active={popover === "siteControls"}
             onPress={press("siteControls", () => togglePopover(tabId, "siteControls"))}
@@ -67,13 +68,13 @@ export const DeveloperBar = memo(function DeveloperBar({ tabId, windowId }: { ta
             </Pressable>
           </ContextMenuArea>
           <View style={DEVELOPER_BUTTON_ROW}>
-            <Button variant="icon" toolbar palette={palette} asset={DEVELOPER_ICONS.link} look="row" onPress={press("copyLink", () => void copyPageUrl(tabId))} tooltip={withShortcut("Copy URL", copyHint)} />
+            <Button variant="icon" toolbar palette={palette} asset={DEVELOPER_ICONS.link} glyph={DEVELOPER_BAR.glyph} look="row" onPress={press("copyLink", () => void copyPageUrl(tabId))} tooltip={withShortcut("Copy URL", copyHint)} />
             {divider}
-            <DeveloperToolsButtons tabId={tabId} palette={palette} look="row" />
+            <DeveloperToolsButtons tabId={tabId} palette={palette} look="row" glyph={DEVELOPER_BAR.glyph} />
             {divider}
             <OverflowButton windowId={windowId} tabId={tabId} hidden={[]} palette={palette} slot={DEVELOPER_BAR_ANCHOR} asset={DEVELOPER_ICONS.extensions} glyph={DEVELOPER_BAR.extensionsGlyph} onActivate={() => noteDeveloperBarPress("extensions")} />
             {splitViewAvailable && (
-              <Button variant="icon" toolbar palette={palette} asset={DEVELOPER_ICONS.split} look="row" onPress={press("split", () => void showSplitSidesMenu(tabId))} tooltip="Split View Options" />
+              <Button variant="icon" toolbar palette={palette} asset={DEVELOPER_ICONS.split} glyph={DEVELOPER_BAR.glyph} look="row" onPress={press("split", () => void showSplitSidesMenu(tabId))} tooltip="Split View Options" />
             )}
           </View>
         </View>
