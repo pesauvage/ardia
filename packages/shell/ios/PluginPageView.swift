@@ -41,7 +41,7 @@ final class PluginPageMessageBridge: NSObject, WKScriptMessageHandler {
 }
 
 final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
-  static var live: [String: PluginPageView] = [:]
+  static let live = WeakLookup<PluginPageView>()
   private var bridge: PluginPageMessageBridge?
 
   let onLoaded = EventDispatcher()
@@ -70,9 +70,31 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private var web: WKWebView?
   private var allowedOrigin: (scheme: String, host: String, port: Int?)?
 
+  private let watcher = WindowWatcher()
+
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
     wantsLayer = true
+    addSubview(watcher)
+    watcher.changed = { [weak self] inWindow in self?.windowChanged(inWindow) }
+  }
+
+  private func windowChanged(_ inWindow: Bool) {
+    if !inWindow {
+      bridge?.revoke()
+    } else if let web, bridge?.revoked ?? true {
+      attachBridge(to: web)
+    }
+  }
+
+  private func attachBridge(to web: WKWebView) {
+    bridge?.revoke()
+    let controller = web.configuration.userContentController
+    controller.removeScriptMessageHandler(forName: "ardia", contentWorld: .page)
+    let bridge = PluginPageMessageBridge(PageBinding.fresh(plugin: plugin, approved: approved, run: run))
+    bridge.webView = web
+    controller.add(bridge, contentWorld: .page, name: "ardia")
+    self.bridge = bridge
   }
 
   deinit {
@@ -96,15 +118,11 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     bridge = nil
     web?.removeFromSuperview()
     web = nil
-    if Self.live[plugin] === self { Self.live[plugin] = nil }
     guard PluginFolders.isName(plugin) else { return }
     let configuration = WKWebViewConfiguration()
     configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: Self.storeIdentifier(plugin))
     configuration.setURLSchemeHandler(
       PluginSchemeHandler(plugin: plugin, folderId: folderId, approved: approved, policy: network ? nil : Self.offlinePolicy), forURLScheme: PluginSchemeHandler.scheme)
-    let bridge = PluginPageMessageBridge(PageBinding.fresh(plugin: plugin, approved: approved, run: run))
-    self.bridge = bridge
-    configuration.userContentController.add(bridge, contentWorld: .page, name: "ardia")
     configuration.userContentController.addUserScript(pageScript())
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
     if !network && !Self.holdOffline(configuration) {
@@ -113,7 +131,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     }
     configuration.mediaTypesRequiringUserActionForPlayback = .all
     let view = WKWebView(frame: bounds, configuration: configuration)
-    bridge.webView = view
+    attachBridge(to: view)
     view.navigationDelegate = self
     view.uiDelegate = self
     view.autoresizingMask = [.width, .height]
@@ -129,10 +147,6 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     web?.frame = bounds
   }
 
-  override func removeFromSuperview() {
-    if Self.live[plugin] === self { Self.live[plugin] = nil }
-    super.removeFromSuperview()
-  }
 
   private static func origin(of url: URL) -> (scheme: String, host: String, port: Int?)? {
     guard let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else { return nil }
@@ -153,8 +167,8 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
 
   private func pageScript() -> WKUserScript {
     let source = """
-      (() => { const port = window.webkit.messageHandlers.ardia; const ardia = new EventTarget(); ardia.context = \(contextLiteral); \
-      ardia.send = (message) => port.postMessage(JSON.stringify(message)); \
+      (() => { const ardia = new EventTarget(); ardia.context = \(contextLiteral); \
+      ardia.send = (message) => window.webkit.messageHandlers.ardia.postMessage(JSON.stringify(message)); \
       Object.defineProperty(window, "ardia", { value: ardia, writable: false, configurable: false }); })();
       """
     return WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page)
