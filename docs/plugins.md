@@ -304,10 +304,18 @@ A plugin's page and its helper talk through Ardia, never over a port:
   view; more is dropped.
 - **Helper to page.** `page.post {"message": value, "view"?: "v3"}` (at most 256 KB) fires a `message` event on
   `window.ardia` in that view, or in every view of the plugin when `view` is left out; the value is `event.data`.
-- **Bound to a run.** A view belongs to the plugin, its approval and the run of the helper it was opened for. Messages
-  from a view go only to that run, `page.post` reaches only views of the run that sent it, and anything else is
-  dropped. When the helper restarts, or the plugin is approved again, the page reloads for the new run. While no
-  helper runs, `send` does nothing.
+  Each view holds at most 64 messages or 1 MB waiting, delivered in order a few at a time; past that `page.post`
+  answers `overloaded` and queues nothing, so a helper should wait for the page (or slow down) and send again.
+- **Bound to a run.** Each page's web view gets its own bridge, fixed when it is made to that web view, the plugin, its
+  approval and the run of the helper. A message counts only if it comes from that same web view, and goes only to
+  that run; `page.post` reaches only bridges of the run that sent it. When the helper restarts, the plugin is approved
+  again or the tab closes, the bridge is revoked, everything waiting for it is dropped, and the page reloads for the
+  new run. While no helper runs, `send` does nothing.
+- **The boundary is the plugin's origin.** Ardia puts `window.ardia` only into the main frame of the plugin's own
+  documents, and only that frame's messages are taken. A same-origin child frame (one of the plugin's own files, or an
+  `about:blank` frame that inherits the origin) can reach the parent's `window.ardia` through ordinary DOM rules, as
+  any same-origin script can: that is the plugin's own code. Nothing from another origin reaches it, and a page can't
+  load another origin's frames in the first place.
 
 A page with live data (a chat) is static files that bridge through their helper:
 

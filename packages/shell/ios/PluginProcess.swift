@@ -20,7 +20,7 @@ final class PluginProcess: PluginRun {
   private var reaped = false
   private var overMemory = false
   let approved: String
-  var onPagePost: ((PluginProcess, PagePost) -> Void)?
+  var onPagePost: ((PluginProcess, PagePost) -> String?)?
   private var family: PluginFamily?
   private var log: Int32
 
@@ -197,8 +197,11 @@ final class PluginProcess: PluginRun {
     var reply: [String: Any]
     switch PluginPageMessages.toPage(object["params"] as? [String: Any] ?? [:]) {
     case .success(let post):
-      onPagePost?(self, post)
-      reply = ["result": ["ok": true]]
+      if let code = onPagePost?(self, post) {
+        reply = ["error": ["code": code, "message": "The page has too many messages waiting; send more once it has caught up."]]
+      } else {
+        reply = ["result": ["ok": true]]
+      }
     case .failure(let refusal):
       reply = ["error": ["code": "bad_request", "message": refusal.reason]]
     }

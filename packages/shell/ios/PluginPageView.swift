@@ -5,19 +5,45 @@ import ExpoModulesCore
 import WebKit
 
 final class PluginPageMessageBridge: NSObject, WKScriptMessageHandler {
-  weak var view: PluginPageView?
+  static let live = NSHashTable<PluginPageMessageBridge>.weakObjects()
 
-  init(_ view: PluginPageView) { self.view = view }
+  let binding: PageBinding
+  weak var webView: WKWebView?
+  private(set) var revoked = false
+  private let limit = PluginPageMessages.Limit()
+
+  init(_ binding: PageBinding) {
+    self.binding = binding
+    super.init()
+    Self.live.add(self)
+    if binding.run > 0 { PluginHost.shared.bindPage(binding) }
+  }
+
+  func revoke() {
+    guard !revoked else { return }
+    revoked = true
+    PluginHost.shared.revokePage(binding)
+  }
 
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-    view?.received(message)
+    let origin = message.frameInfo.securityOrigin
+    guard !revoked, let webView, message.webView === webView, message.frameInfo.isMainFrame, origin.protocol == PluginSchemeHandler.scheme,
+      origin.host == binding.plugin, binding.run > 0, limit.allow(now: ProcessInfo.processInfo.systemUptime)
+    else { return }
+    PluginHost.shared.pageMessage(binding, body: message.body)
+  }
+
+  static func deliver(_ binding: PageBinding, _ json: String, done: @escaping () -> Void) {
+    guard let bridge = live.allObjects.first(where: { $0.binding == binding && !$0.revoked }), let webView = bridge.webView else { return done() }
+    let script = "if (window.ardia) window.ardia.dispatchEvent(new MessageEvent(\"message\", { data: JSON.parse(\(PluginPageView.jsString(json))) }));"
+    webView.evaluateJavaScript(script) { _, _ in done() }
   }
 }
 
 final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   static var live: [String: PluginPageView] = [:]
-  private static let all = NSHashTable<PluginPageView>.weakObjects()
   private static var views = 0
+  private var bridge: PluginPageMessageBridge?
 
   let onLoaded = EventDispatcher()
 
@@ -29,7 +55,6 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   var run = 0 { didSet { if run != oldValue { rebuild() } } }
   var context = "" { didSet { if context != oldValue { handOver() } } }
   let viewId: String
-  private let limit = PluginPageMessages.Limit()
 
   static let offlinePolicy =
     "default-src 'self' ardia-plugin: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ardia-plugin:; form-action 'self'; worker-src 'none'"
@@ -50,7 +75,10 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     viewId = "v\(Self.views)"
     super.init(appContext: appContext)
     wantsLayer = true
-    Self.all.add(self)
+  }
+
+  deinit {
+    bridge?.revoke()
   }
 
   static func storeIdentifier(_ plugin: String) -> UUID {
@@ -66,6 +94,8 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   }
 
   private func rebuild() {
+    bridge?.revoke()
+    bridge = nil
     web?.removeFromSuperview()
     web = nil
     if Self.live[plugin] === self { Self.live[plugin] = nil }
@@ -74,7 +104,9 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: Self.storeIdentifier(plugin))
     configuration.setURLSchemeHandler(
       PluginSchemeHandler(plugin: plugin, folderId: folderId, approved: approved, policy: network ? nil : Self.offlinePolicy), forURLScheme: PluginSchemeHandler.scheme)
-    configuration.userContentController.add(PluginPageMessageBridge(self), contentWorld: .page, name: "ardia")
+    let bridge = PluginPageMessageBridge(PageBinding(plugin: plugin, approved: approved, run: run, view: viewId))
+    self.bridge = bridge
+    configuration.userContentController.add(bridge, contentWorld: .page, name: "ardia")
     configuration.userContentController.addUserScript(pageScript())
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
     if !network && !Self.turnOffPeerConnections(configuration.preferences) {
@@ -83,6 +115,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     }
     configuration.mediaTypesRequiringUserActionForPlayback = .all
     let view = WKWebView(frame: bounds, configuration: configuration)
+    bridge.webView = view
     view.navigationDelegate = self
     view.uiDelegate = self
     view.autoresizingMask = [.width, .height]
@@ -113,7 +146,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     return mine.scheme == theirs.scheme && mine.host == theirs.host && mine.port == theirs.port
   }
 
-  private static func jsString(_ text: String) -> String {
+  static func jsString(_ text: String) -> String {
     guard let data = try? JSONSerialization.data(withJSONObject: text, options: [.fragmentsAllowed]), let literal = String(data: data, encoding: .utf8) else { return "\"\"" }
     return literal
   }
@@ -137,20 +170,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     web.evaluateJavaScript(update, completionHandler: nil)
   }
 
-  func received(_ message: WKScriptMessage) {
-    let origin = message.frameInfo.securityOrigin
-    guard message.frameInfo.isMainFrame, origin.protocol == PluginSchemeHandler.scheme, origin.host == plugin, run > 0, !approved.isEmpty,
-      limit.allow(now: ProcessInfo.processInfo.systemUptime)
-    else { return }
-    PluginHost.shared.pageMessage(plugin, run: run, approved: approved, view: viewId, body: message.body)
-  }
 
-  static func deliver(_ post: PagePost, plugin: String, run: Int, approved: String) {
-    for view in all.allObjects where view.plugin == plugin && view.run == run && view.approved == approved && (post.view == nil || post.view == view.viewId) {
-      let script = "if (window.ardia) window.ardia.dispatchEvent(new MessageEvent(\"message\", { data: JSON.parse(\(jsString(post.json))) }));"
-      view.web?.evaluateJavaScript(script, completionHandler: nil)
-    }
-  }
 
   private func load() {
     guard let web, let target = URL(string: url), let origin = Self.origin(of: target), origin.scheme == PluginSchemeHandler.scheme, origin.host == plugin else { return }

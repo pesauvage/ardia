@@ -11,6 +11,7 @@ final class PluginHost {
   private var sink: (owner: ObjectIdentifier, send: Sink)?
   private let runs = PluginRuns<PluginProcess>()
   private let lifecycle = PluginLifecycle()
+  private let outbox = PluginPageOutbox()
   private var nextRun = 0
   private var quitObserver: NSObjectProtocol?
 
@@ -68,10 +69,7 @@ final class PluginHost {
     switch result {
     case .success(let process):
       runs.installed(process)
-      process.onPagePost = { process, post in
-        let (plugin, run, approved) = (process.name, process.run, process.approved)
-        DispatchQueue.main.async { PluginPageView.deliver(post, plugin: plugin, run: run, approved: approved) }
-      }
+      process.onPagePost = { [weak self] process, post in self?.post(post, from: process) }
       done(["ok": true, "run": process.run, "pid": Int(process.pid)])
     case .failure(let failure):
       NSLog("[plugins] %@ didn't start: %@", spec.name, failure.reason)
@@ -79,11 +77,42 @@ final class PluginHost {
     }
   }
 
-  func pageMessage(_ plugin: String, run: Int, approved: String, view: String, body: Any) {
-    guard let line = PluginPageMessages.fromPage(body, view: view) else { return }
+  func bindPage(_ binding: PageBinding) {
+    queue.async { [self] in outbox.bind(binding) }
+  }
+
+  func revokePage(_ binding: PageBinding) {
+    queue.async { [self] in outbox.revoke(binding) }
+  }
+
+  func pageMessage(_ binding: PageBinding, body: Any) {
+    guard let line = PluginPageMessages.fromPage(body, view: binding.view) else { return }
     queue.async { [self] in
-      guard let process = runs.current[plugin], process.run == run, process.approved == approved, !process.exited else { return }
+      guard outbox.isBound(binding), let process = runs.current[binding.plugin], process.run == binding.run, process.approved == binding.approved, !process.exited
+      else { return }
       process.connection?.send(line)
+    }
+  }
+
+  private func post(_ post: PagePost, from process: PluginProcess) -> String? {
+    switch outbox.post(plugin: process.name, approved: process.approved, run: process.run, view: post.view, json: post.json) {
+    case .overloaded: return "overloaded"
+    case .queued(let targets):
+      targets.forEach(pump)
+      return nil
+    }
+  }
+
+  private func pump(_ binding: PageBinding) {
+    while let json = outbox.take(binding) {
+      DispatchQueue.main.async {
+        PluginPageMessageBridge.deliver(binding, json) { [weak self] in
+          self?.queue.async {
+            self?.outbox.delivered(binding)
+            self?.pump(binding)
+          }
+        }
+      }
     }
   }
 
