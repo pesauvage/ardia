@@ -334,9 +334,10 @@ whichever profile the tab's window shows:
 - **Its network follows the plugin's.** Without `network`, a file page's own requests (scripts, images, `fetch`,
   WebSockets) may only reach its own origin and this Mac, and it can't start workers: Ardia sends a Content Security
   Policy in every response header.
-- **Stays on its origin.** Its own origin may navigate freely; a link you click to any other http(s) address opens
-  as a new tab in the window's profile (where your cookies apply, as for any link you open), and every other
-  navigation, a pop-up or a `window.open` included, is cancelled.
+- **Stays on its origin.** Its own origin may navigate freely. A link to any other http(s) address that you click
+  opens as a new tab in the window's profile (where your cookies apply, as for any link you open), but only within a
+  second of a click or key press of yours in that page: a link a script clicks, a pop-up or a `window.open` opens
+  nothing. Downloads and every other navigation are cancelled.
 
 ## The ardia command
 

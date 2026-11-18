@@ -148,13 +148,25 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   }
 
   func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-    guard let target = action.request.url else { return decisionHandler(.cancel) }
+    guard let target = action.request.url, !action.shouldPerformDownload else { return decisionHandler(.cancel) }
     if isAllowed(target) && action.targetFrame != nil { return decisionHandler(.allow) }
     if target.scheme == "about" && action.targetFrame?.isMainFrame == false { return decisionHandler(.allow) }
-    if action.navigationType == .linkActivated, let scheme = target.scheme?.lowercased(), scheme == "http" || scheme == "https" {
-      onOpenUrl(["url": target.absoluteString])
-    }
+    forwardIfClicked(action)
     decisionHandler(.cancel)
+  }
+
+  static let inputWindow: TimeInterval = 1
+
+  private func followsInput() -> Bool {
+    guard let event = NSApp.currentEvent, event.window === window, [.leftMouseUp, .otherMouseUp, .keyDown].contains(event.type) else { return false }
+    return ProcessInfo.processInfo.systemUptime - event.timestamp < Self.inputWindow
+  }
+
+  private func forwardIfClicked(_ action: WKNavigationAction) {
+    guard action.navigationType == .linkActivated, !action.shouldPerformDownload, let target = action.request.url, let scheme = target.scheme?.lowercased(),
+      scheme == "http" || scheme == "https", followsInput()
+    else { return }
+    onOpenUrl(["url": target.absoluteString])
   }
 
   func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
@@ -166,9 +178,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   }
 
   func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-    if action.navigationType == .linkActivated, let target = action.request.url, let scheme = target.scheme?.lowercased(), scheme == "http" || scheme == "https" {
-      onOpenUrl(["url": target.absoluteString])
-    }
+    forwardIfClicked(action)
     return nil
   }
 
