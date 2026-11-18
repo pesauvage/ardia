@@ -4,6 +4,7 @@ import Foundation
 final class PluginProcess: PluginRun {
   static let channelFd: Int32 = 3
   static let memoryCheckInterval: TimeInterval = 10
+  static let familySampleInterval: TimeInterval = 1
 
   let name: String
   let run: Int
@@ -16,6 +17,8 @@ final class PluginProcess: PluginRun {
   private var killTimer: DispatchWorkItem?
   private var stopWaiters: [() -> Void] = []
   private(set) var exited = false
+  private var reaped = false
+  private var familyTimer: DispatchSourceTimer?
   private var overMemory = false
   private var family: Set<PluginProcessMember> = []
   private var log: Int32
@@ -119,6 +122,7 @@ final class PluginProcess: PluginRun {
     posix_spawnattr_setsigmask(&attributes, &none)
     posix_spawnattr_setsigdefault(&attributes, &all)
     posix_spawnattr_setpgroup(&attributes, 0)
+    _ = PluginProcessTree.disclaim(&attributes)
     posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF))
     let argv = ["/usr/bin/sandbox-exec"] + sandboxArguments + [program] + spec.run.dropFirst()
     let env = environment(name: spec.name, data: data)
@@ -160,45 +164,59 @@ final class PluginProcess: PluginRun {
     timer.setEventHandler { [weak self] in self?.checkMemory() }
     memoryTimer = timer
     timer.activate()
+    let sampler = DispatchSource.makeTimerSource(queue: queue)
+    sampler.schedule(deadline: .now() + Self.familySampleInterval, repeating: Self.familySampleInterval)
+    sampler.setEventHandler { [weak self] in
+      guard let self, !self.exited else { return }
+      self.rememberFamily()
+    }
+    familyTimer = sampler
+    sampler.activate()
     queue.async { [weak self] in self?.reapIfGone(onExit) }
   }
 
   private func reapIfGone(_ onExit: @escaping (PluginProcess, Int32?, Int32?, Bool) -> Void) {
-    var status: Int32 = 0
-    if !exited, waitpid(pid, &status, WNOHANG) == pid { finish(status, onExit) }
+    reap(onExit)
+  }
+
+  private func hasExited() -> Bool? {
+    var info = siginfo_t()
+    var got = waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT)
+    while got < 0 && errno == EINTR { got = waitid(P_PID, id_t(pid), &info, WEXITED | WNOHANG | WNOWAIT) }
+    if got < 0 { return nil }
+    return info.si_pid == pid
   }
 
   private func reap(_ onExit: @escaping (PluginProcess, Int32?, Int32?, Bool) -> Void) {
-    guard !exited else { return }
-    var status: Int32 = 0
-    var got = waitpid(pid, &status, WNOHANG)
-    while got < 0 && errno == EINTR { got = waitpid(pid, &status, WNOHANG) }
-    if got == pid { finish(status, onExit) } else if got < 0 { finishUnknown(onExit) }
-  }
-
-  private func finishUnknown(_ onExit: @escaping (PluginProcess, Int32?, Int32?, Bool) -> Void) {
+    guard !reaped else { return }
+    switch hasExited() {
+    case .some(false): return
+    case .none:
+      exited = true
+      reaped = true
+      signalFamily(SIGKILL)
+      cleanUp()
+      return onExit(self, nil, nil, overMemory)
+    case .some(true): break
+    }
     exited = true
     signalFamily(SIGKILL)
+    var status: Int32 = 0
+    while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+    reaped = true
     cleanUp()
-    onExit(self, nil, nil, overMemory)
+    let signaled = (status & 0x7f) != 0 && (status & 0x7f) != 0x7f
+    onExit(self, signaled ? nil : (status >> 8) & 0xff, signaled ? status & 0x7f : nil, overMemory)
   }
 
   private func rememberFamily() {
-    family.formUnion(PluginProcessTree.family(of: pid))
+    family = PluginProcessTree.alive(family).union(PluginProcessTree.family(of: pid))
   }
 
   private func signalFamily(_ signal: Int32) {
     if !exited { rememberFamily() }
-    kill(-pid, signal)
+    if !reaped { kill(-pid, signal) }
     PluginProcessTree.signal(family, signal)
-  }
-
-  private func finish(_ status: Int32, _ onExit: @escaping (PluginProcess, Int32?, Int32?, Bool) -> Void) {
-    exited = true
-    signalFamily(SIGKILL)
-    cleanUp()
-    let signaled = (status & 0x7f) != 0 && (status & 0x7f) != 0x7f
-    onExit(self, signaled ? nil : (status >> 8) & 0xff, signaled ? status & 0x7f : nil, overMemory)
   }
 
   private func cleanUp() {
@@ -206,6 +224,8 @@ final class PluginProcess: PluginRun {
     exitSource = nil
     memoryTimer?.cancel()
     memoryTimer = nil
+    familyTimer?.cancel()
+    familyTimer = nil
     killTimer?.cancel()
     killTimer = nil
     connection?.close()
@@ -227,7 +247,6 @@ final class PluginProcess: PluginRun {
   private func checkMemory() {
     guard !exited else { return }
     capLog()
-    rememberFamily()
     var info = rusage_info_v4()
     let got = withUnsafeMutablePointer(to: &info) { pointer in
       pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V4, $0) }
@@ -261,11 +280,13 @@ final class PluginProcess: PluginRun {
     connection?.close()
     signalFamily(SIGTERM)
     let deadline = Date().addingTimeInterval(seconds)
-    var status: Int32 = 0
     while Date() < deadline {
-      if waitpid(pid, &status, WNOHANG) == pid {
+      if hasExited() != false {
         exited = true
         signalFamily(SIGKILL)
+        var status: Int32 = 0
+        _ = waitpid(pid, &status, WNOHANG)
+        reaped = true
         return
       }
       usleep(20_000)

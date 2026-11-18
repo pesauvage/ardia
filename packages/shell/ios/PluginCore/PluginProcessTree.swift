@@ -7,6 +7,18 @@ struct PluginProcessMember: Hashable {
 }
 
 enum PluginProcessTree {
+  private typealias Disclaim = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
+  private typealias Responsible = @convention(c) (pid_t) -> pid_t
+  private static let disclaimer: Disclaim? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim").map { unsafeBitCast($0, to: Disclaim.self) }
+  private static let responsibleFor: Responsible? = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_get_pid_responsible_for_pid").map { unsafeBitCast($0, to: Responsible.self) }
+
+  static var tracksResponsibility: Bool { disclaimer != nil && responsibleFor != nil }
+
+  static func disclaim(_ attributes: inout posix_spawnattr_t?) -> Bool {
+    guard let disclaimer, responsibleFor != nil else { return false }
+    return disclaimer(&attributes, 1) == 0
+  }
+
   struct Entry {
     let pid: pid_t
     let ppid: pid_t
@@ -33,6 +45,9 @@ enum PluginProcessTree {
     let entries = table()
     let excluded: Set<pid_t> = [0, 1, getpid()]
     var pids: Set<pid_t> = [root]
+    if let responsibleFor {
+      for e in entries where !excluded.contains(e.pid) && responsibleFor(e.pid) == root { pids.insert(e.pid) }
+    }
     var grew = true
     while grew {
       grew = false
@@ -42,6 +57,10 @@ enum PluginProcessTree {
       }
     }
     return Set(entries.filter { pids.contains($0.pid) && !excluded.contains($0.pid) }.map { PluginProcessMember(pid: $0.pid, started: $0.started) })
+  }
+
+  static func alive(_ members: Set<PluginProcessMember>) -> Set<PluginProcessMember> {
+    members.filter { entry($0.pid)?.started == $0.started }
   }
 
   static func signal(_ members: Set<PluginProcessMember>, _ signal: Int32) {

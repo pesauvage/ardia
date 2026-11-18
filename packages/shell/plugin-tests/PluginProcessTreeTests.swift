@@ -80,3 +80,51 @@ final class PluginProcessTreeTests: XCTestCase {
     XCTAssertFalse(pids.contains(1))
   }
 }
+
+final class PluginResponsibilityTests: XCTestCase {
+  static let cli = """
+    import os, subprocess, sys, time
+    os.setsid()
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    open(sys.argv[1], "w").write(f"{os.getpid()} {child.pid}")
+    time.sleep(60)
+    """
+
+  func testAHelpersCliAndItsChildAreFoundAfterTheCliParentExited() throws {
+    guard PluginProcessTree.tracksResponsibility else { throw XCTSkip("this macOS has no responsibility calls") }
+    let marker = FileManager.default.temporaryDirectory.appendingPathComponent("tree-\(UUID().uuidString)").path
+    let script = "/usr/bin/python3 -c '\(Self.cli.replacingOccurrences(of: "'", with: "'\\''"))' \(marker) & exit 0"
+    let helperScript = "/bin/sh -c \"$1\"; sleep 60"
+    var attributes: posix_spawnattr_t?
+    posix_spawnattr_init(&attributes)
+    defer { posix_spawnattr_destroy(&attributes) }
+    posix_spawnattr_setpgroup(&attributes, 0)
+    posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP))
+    XCTAssertTrue(PluginProcessTree.disclaim(&attributes))
+    var helper: pid_t = 0
+    let argv = ["/bin/sh", "-c", helperScript, "helper", script].map { strdup($0) } + [nil]
+    defer { argv.forEach { free($0) } }
+    XCTAssertEqual(posix_spawn(&helper, "/bin/sh", nil, &attributes, argv, environ), 0)
+    defer {
+      kill(helper, SIGKILL)
+      waitpid(helper, nil, 0)
+    }
+    var pids: [pid_t] = []
+    let deadline = Date().addingTimeInterval(10)
+    while pids.count < 2 && Date() < deadline {
+      pids = ((try? String(contentsOfFile: marker, encoding: .utf8)) ?? "").split(separator: " ").compactMap { pid_t($0) }
+      usleep(50_000)
+    }
+    XCTAssertEqual(pids.count, 2, "the CLI and its child started")
+    defer { pids.forEach { kill($0, SIGKILL) } }
+    XCTAssertEqual(PluginProcessTree.entry(pids[0])?.ppid, 1, "the CLI's parent shell has exited")
+    let family = PluginProcessTree.family(of: helper)
+    XCTAssertTrue(pids.allSatisfy { pid in family.contains { $0.pid == pid } }, "the orphaned CLI and its child are the helper's")
+    PluginProcessTree.signal(family, SIGKILL)
+    for pid in pids {
+      let gone = Date().addingTimeInterval(3)
+      while kill(pid, 0) == 0 && Date() < gone { usleep(20_000) }
+      XCTAssertNotEqual(kill(pid, 0), 0)
+    }
+  }
+}

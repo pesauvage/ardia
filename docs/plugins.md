@@ -205,11 +205,13 @@ settings only once it is saved, so a failed save changes nothing.
   channel, sends SIGTERM to the helper's processes and SIGKILL 3 s later (at quit, after 1 s). A start, a restart and a
   removal first wait until every earlier run of the plugin has exited, its grace period included, so two runs never
   overlap. The helper's processes
-  are its process group plus every descendant, found from the process table just before each signal and remembered
-  every 10 s with their start times, so a child that started its own session (`setsid`, Node's `detached`) or was
-  orphaned when its parent exited still goes, and a reused process id is never signalled. When the helper exits on
-  its own, the processes remembered for it are ended too. A helper may start other programs (the AI plugin runs the
-  Claude Code CLI).
+  are found by responsibility: Ardia starts the helper as responsible for itself, so every process it starts, at
+  any depth and whatever session or group it moves to (`setsid`, Node's `detached`, a double fork), names the helper
+  as its responsible process while the helper runs. Together with its process group and descendants they are read
+  just before each signal and sampled every second, each with its start time, so a reused process id is never
+  signalled. The group is signalled only while the helper's exited process hasn't been reaped yet, so its id can't
+  belong to anyone else. When the helper exits on its own, the processes last sampled for it are ended. A helper may
+  start other programs (the AI plugin runs the Claude Code CLI).
 - **Supervised.** A helper that exits with a failure or a signal, or whose own process goes over `memoryMB` (a watchdog:
   its physical footprint checked every 10 s, not a hard cap, and its child processes aren't counted), is restarted after
   1, 2, 4, 8 then 16 s. After 5 failures within 10 minutes it stays stopped and its row says it crashed, with Restart.
@@ -237,9 +239,11 @@ settings only once it is saved, so a failed save changes nothing.
   a default-allow profile), so a helper could script an app that accepts them, Ardia's own AppleScript included, which
   stays behind its own settings; files your config folder links to outside your home are readable; the system services
   every program reaches are reachable; a local server it starts may listen on any address (bind served pages to
-  `127.0.0.1`); it isn't limited in CPU. A program that detaches twice onto launchd (a double fork) between two of those checks, or that is started
-  through launchd or another app, is out of Ardia's reach and keeps running, still inside the sandbox, until it is
-  stopped by hand. If Ardia crashes, a helper that doesn't exit when its channel closes keeps
+  `127.0.0.1`); it isn't limited in CPU. Out of Ardia's reach: a program started through launchd or another app (`open`,
+  `launchctl`), and one started less than a second before a helper exits on its own; both keep running, still inside
+  the sandbox, until stopped by hand. Checking a process id's start time and signalling it are two calls, so an id
+  reused within microseconds in between could be hit. On a macOS without the responsibility calls, Ardia falls back
+  to the process group and descendants, which a double fork escapes. If Ardia crashes, a helper that doesn't exit when its channel closes keeps
   running until it is stopped by hand. So the permissions below are what Ardia hands a helper through its channel and
   what the sandbox holds it to on disk and on the network; the gaps above are outside them. Issue #2495 moves the
   helper to a deny-by-default profile.
