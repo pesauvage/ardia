@@ -1,5 +1,10 @@
 #import "ArdiaInternal.h"
 
+#import "ArdiaEngineBridge.h"
+#import "ArdiaFaviconSchemes.h"
+#import "ArdiaFaviconStore.h"
+#import "ArdiaRuntime.h"
+
 namespace {
 
 constexpr int kFaviconSize = 32;
@@ -39,8 +44,18 @@ NSDictionary *Store(NSData *png, int width, int height, NSString *profile, NSStr
                                                (long long)(NSDate.date.timeIntervalSince1970 * 1000)];
     return @{@"uri" : uri, @"width" : @(width), @"height" : @(height)};
   }
-  NSString *uri = [@"data:image/png;base64," stringByAppendingString:[png base64EncodedStringWithOptions:0]];
-  return @{@"uri" : uri, @"width" : @(width), @"height" : @(height)};
+  NSString *uri = [ArdiaFaviconStore uriForPNG:png profile:profile];
+  return uri ? @{@"uri" : uri, @"width" : @(width), @"height" : @(height)} : nil;
+}
+
+NSDictionary *Stored(NSString *uri) {
+  NSImageRep *rep = [NSBitmapImageRep imageRepWithData:[ArdiaFaviconStore pngForURI:uri] ?: [NSData data]];
+  return rep ? @{@"uri" : uri, @"width" : @(rep.pixelsWide), @"height" : @(rep.pixelsHigh)} : nil;
+}
+
+bool IsWebURL(NSString *url) {
+  NSString *scheme = [NSURL URLWithString:url].scheme.lowercaseString;
+  return [scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"];
 }
 
 NSData *PNG(NSImage *image, int pixels, int *width, int *height) {
@@ -95,6 +110,8 @@ void Download(NSString *url, NSString *profileName, void (^done)(NSData *_Nullab
           name:(NSString *)name
     completion:(void (^)(NSDictionary<NSString *, id> *))completion {
   int width = 0, height = 0;
+  if ([ArdiaFaviconStore holdsURI:url]) return completion(Stored(url));
+  if (ardia_favicons::HasNoIcon(url) && ![url hasPrefix:@"data:image/"]) return completion(nil);
   if (NSImage *seen = [Seen() objectForKey:SeenKey(profile, url)]) {
     return completion(Store(PNG(seen, kFaviconSize * 2, &width, &height), width, height, profile, name));
   }
@@ -103,13 +120,30 @@ void Download(NSString *url, NSString *profileName, void (^done)(NSData *_Nullab
     NSImage *image = data ? [[NSImage alloc] initWithData:data] : nil;
     return completion(Store(PNG(image, kFaviconSize * 2, &width, &height), width, height, profile, name));
   }
-  NSString *scheme = [NSURL URLWithString:url].scheme.lowercaseString;
-  if (!([scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"])) return completion(nil);
+  if (!IsWebURL(url)) return completion(nil);
   Download(url, profile, ^(NSData *body) {
     int w = 0, h = 0;
     NSImage *image = body ? [[NSImage alloc] initWithData:body] : nil;
     completion(image ? Store(PNG(image, kFaviconSize * 2, &w, &h), w, h, profile, name) : nil);
   });
+}
+
++ (void)fetch:(NSString *)url page:(NSString *)page profile:(NSString *)profile completion:(void (^)(NSDictionary<NSString *, id> *))completion {
+  [self fetch:url
+         profile:profile
+            name:nil
+      completion:^(NSDictionary<NSString *, id> *image) {
+        completion(image);
+        NSData *png = page.length && !ardia_favicons::HasNoIcon(page) && IsWebURL(url) && !ardia_host::IsPrivateProfile(profile) ? [ArdiaFaviconStore pngForURI:image[@"uri"]] : nil;
+        if (!png) return;
+        NSString *args = ardia_runtime::JSONText(@{@"page" : page, @"icon" : url, @"png" : [png base64EncodedStringWithOptions:0]});
+        [ArdiaEngineBridge call:@"ac_favicons_set" profile:profile args:args completion:^(NSString *) {}];
+      }];
+}
+
++ (NSString *)uriForImage:(NSImage *)image profile:(NSString *)profile {
+  int width = 0, height = 0;
+  return [ArdiaFaviconStore uriForPNG:PNG(image, kFaviconSize * 2, &width, &height) profile:profile];
 }
 
 @end

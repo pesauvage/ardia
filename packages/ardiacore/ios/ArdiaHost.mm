@@ -1,6 +1,7 @@
 #import "ArdiaHostInternal.h"
 #import "ArdiaLaunchConfig.h"
 #import "ArdiaEarlyWindow.h"
+#import "ArdiaFaviconStore.h"
 #import "ArdiaServices.h"
 #import "ArdiaNavigationDownloads.h"
 #import "ArdiaStartup.h"
@@ -150,6 +151,7 @@ static void (^gQuitCancelledHandler)(void);
     [ProfileWaiters() removeObjectForKey:profile];
     for (void (^waiter)(ArdiaCoreProfile *) in waiting) waiter(nil);
     ardia_host::ForgetPrivateNavigationDownloads(profile);
+    [ArdiaFaviconStore forgetProfile:profile keeping:@[]];
     if ([Profiles().allValues containsObject:p]) return;
   }
   if (p) [engine releaseProfile:p];

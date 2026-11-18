@@ -94,6 +94,7 @@ void PrepareContentBlocker();
 
 @interface ArdiaFavicons (Tabs)
 + (void)noteImage:(nullable NSImage *)image forURL:(nullable NSString *)url profile:(nullable NSString *)profile;
++ (nullable NSString *)uriForImage:(nullable NSImage *)image profile:(nullable NSString *)profile;
 @end
 
 NS_ASSUME_NONNULL_END

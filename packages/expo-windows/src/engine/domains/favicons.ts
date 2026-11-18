@@ -39,6 +39,10 @@ export function pngImage(base64: string): { uri: string; width: number; height: 
 const later = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export const faviconCalls: Handlers = {
+  get: async (args, engine) => ok(await served(engine, "ac_favicons_get", args.profile, args.values)),
+  set: async (args, engine) => ok(await served(engine, "ac_favicons_set", args.profile, args.values)),
+  forget: async () => ok(null),
+  counts: async () => ok({ memory: 0, disk: 0, missed: 0, stored: 0 }),
   fetch: async (args, engine) => {
     const url = args.text("url");
     if (url.startsWith(PNG_DATA)) return ok(pngImage(url.slice(PNG_DATA.length)));

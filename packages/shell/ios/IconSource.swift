@@ -33,7 +33,9 @@ struct IconSource: Equatable {
     }
     guard let uri else { return nil }
     let image: NSImage?
-    if uri.hasPrefix("data:") {
+    if ArdiaFaviconStore.holds(uri) {
+      image = ArdiaFaviconStore.image(uri)
+    } else if uri.hasPrefix("data:") {
       image = NSImage(dataURL: uri)
     } else if let url = URL(string: uri), url.isFileURL {
       image = NSImage(contentsOfFile: url.path)

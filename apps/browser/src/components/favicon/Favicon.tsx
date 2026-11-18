@@ -1,7 +1,8 @@
 import { displayHost, hostOf } from "@ardia/core";
 import { memo, useState } from "react";
 import { Image, Text, View } from "react-native";
-import { faviconFailed, useAppearanceDark, useFavicon, useFaviconTheme } from "../../state/favicons/favicons";
+import { faviconFailed, useAppearanceDark, useFavicon } from "../../state/favicons/favicons";
+import { useFaviconTheme } from "../../state/favicons/faviconTheme";
 import { radius, Symbol, useTheme, weight } from "../ui";
 import { typeFace } from "../ui/tokens";
 import { bundledSiteIcon } from "./siteIcons";
@@ -35,8 +36,7 @@ export const Favicon = memo(function Favicon({
       key={white ? `${resolved.uri} tinted` : resolved.uri}
       source={{ uri: resolved.uri }}
       onError={() => {
-        setBroken(resolved.uri);
-        if (resolved.profileId) faviconFailed(resolved.profileId, resolved.uri);
+        if (!resolved.profileId || !faviconFailed(resolved.profileId, resolved.uri)) setBroken(resolved.uri);
       }}
       style={{ width: size, height: size, borderRadius: size > 18 ? radius.control : radius.hair, tintColor: white ? theme.textPrimary : undefined, opacity }}
     />

@@ -1,5 +1,6 @@
 #import "ArdiaWebViewInternal.h"
 #import "ArdiaEarlyWindow.h"
+#import "ArdiaFaviconSchemes.h"
 #import "ArdiaFieldTiming.h"
 #import "ArdiaNavigationDownloads.h"
 
@@ -37,13 +38,6 @@ NSString *ReportedTitle(NSString *title, NSString *url, BOOL loading) {
   return [title isEqualToString:shown] ? @"" : title;
 }
 
-NSString *PNGDataURL(NSImage *image) {
-  CGImageRef cg = [image CGImageForProposedRect:nil context:nil hints:nil];
-  if (!cg) return nil;
-  NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:cg];
-  NSData *png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
-  return png.length ? [@"data:image/png;base64," stringByAppendingString:[png base64EncodedStringWithOptions:0]] : nil;
-}
 }
 
 @implementation ArdiaWebView (Navigation)
@@ -195,11 +189,11 @@ NSString *PNGDataURL(NSImage *image) {
 }
 
 - (void)tabDidChangeFavicon:(ArdiaCoreTab *)tab {
-  NSImage *image = tab.favicon;
+  NSImage *image = ardia_favicons::HasNoIcon(tab.url) ? nil : tab.favicon;
   if (!image) return;
   NSString *url = tab.faviconURL;
-  if (url.length) [ArdiaFavicons noteImage:image forURL:url profile:_profile];
-  else url = PNGDataURL(image);
+  if (url.length && ![url hasPrefix:@"data:"]) [ArdiaFavicons noteImage:image forURL:url profile:_profile];
+  else url = [ArdiaFavicons uriForImage:image profile:_profile];
   if (!url.length || [url isEqualToString:_sent.favicon]) return;
   _sent.favicon = url;
   [self emit:@"favicon" payload:@{@"url" : url, @"urls" : @[ url ]}];

@@ -1,5 +1,5 @@
 import { isIncognitoProfile } from "../browser/model";
-import { cacheKey, EMPTY_ICONS, useFavicons, type Favicons } from "./favicons";
+import { cacheKey, EMPTY_ICONS, refreshInlineSeeds, useFavicons, type Favicons } from "./favicons";
 import { withoutFragment } from "../../lib/url";
 
 export type LaunchFavicons = {
@@ -48,9 +48,11 @@ export function launchFavicons(tabs: { url: string; favicon: string | null; prof
   return look;
 }
 
-const imagesOf = (map: unknown, images: string[]): Record<string, string> =>
+const INLINE_ICON = "data:image/";
+
+const imagesOf = (map: unknown, images: string[], starting = ""): Record<string, string> =>
   map && typeof map === "object"
-    ? Object.fromEntries(Object.entries(map).flatMap(([k, i]) => (typeof i === "number" && typeof images[i] === "string" ? [[k, images[i]!]] : [])))
+    ? Object.fromEntries(Object.entries(map).flatMap(([k, i]) => (typeof i === "number" && typeof images[i] === "string" && images[i]!.startsWith(starting) ? [[k, images[i]!]] : [])))
     : {};
 
 export function seedFavicons(seed: LaunchFavicons) {
@@ -74,4 +76,5 @@ export function seedFavicons(seed: LaunchFavicons) {
     }
     return { profiles, themes: { ...themes, ...f.themes } };
   });
+  for (const [key, saved] of seeded) refreshInlineSeeds(key, Object.keys(imagesOf(saved?.pages, images, INLINE_ICON)));
 }
