@@ -211,9 +211,10 @@ settings only once it is saved, so a failed save changes nothing.
 
 - **Starts** when the plugin is turned on, at launch for plugins that are on (after the first window), and when you
   press Restart. **Stops** when it is turned off, removed, its manifest changes, or Ardia quits: Ardia closes its
-  channel, sends SIGTERM to the helper's processes and SIGKILL 3 s later (at quit, after 1 s). A start, a restart and a
-  removal first wait until every earlier run of the plugin has exited, its grace period included, so two runs never
-  overlap. The helper's processes
+  channel, sends SIGTERM to the helper's processes and SIGKILL 3 s later (at quit, after 1 s). Starts, stops and removals of a plugin
+  go through one queue, each to its end (the helper spawned, the folder deleted) before the next begins, and each first
+  waits until every earlier run has exited, its grace period included, so two runs never overlap. A stop or removal
+  cancels starts still waiting in the queue. The helper's processes
   are found by responsibility: Ardia starts the helper as responsible for itself, so every process it starts, at
   any depth and whatever session or group it moves to (`setsid`, Node's `detached`, a double fork), names the helper
   as its responsible process while the helper runs. Ardia reads that set, with the helper's group and descendants and
