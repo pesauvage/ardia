@@ -17,6 +17,7 @@ final class PluginProcess {
   private var stopWaiters: [() -> Void] = []
   private(set) var exited = false
   private var overMemory = false
+  private var family: Set<PluginProcessMember> = []
   private var log: Int32
 
   struct Spec {
@@ -177,13 +178,24 @@ final class PluginProcess {
 
   private func finishUnknown(_ onExit: @escaping (PluginProcess, Int32?, Int32?, Bool) -> Void) {
     exited = true
+    signalFamily(SIGKILL)
     cleanUp()
     onExit(self, nil, nil, overMemory)
   }
 
+  private func rememberFamily() {
+    family.formUnion(PluginProcessTree.family(of: pid))
+  }
+
+  private func signalFamily(_ signal: Int32) {
+    if !exited { rememberFamily() }
+    kill(-pid, signal)
+    PluginProcessTree.signal(family, signal)
+  }
+
   private func finish(_ status: Int32, _ onExit: @escaping (PluginProcess, Int32?, Int32?, Bool) -> Void) {
     exited = true
-    kill(-pid, SIGKILL)
+    signalFamily(SIGKILL)
     cleanUp()
     let signaled = (status & 0x7f) != 0 && (status & 0x7f) != 0x7f
     onExit(self, signaled ? nil : (status >> 8) & 0xff, signaled ? status & 0x7f : nil, overMemory)
@@ -215,27 +227,25 @@ final class PluginProcess {
   private func checkMemory() {
     guard !exited else { return }
     capLog()
+    rememberFamily()
     var info = rusage_info_v4()
     let got = withUnsafeMutablePointer(to: &info) { pointer in
       pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(pid, RUSAGE_INFO_V4, $0) }
     }
     guard got == 0, info.ri_phys_footprint > memoryLimit else { return }
     overMemory = true
-    kill(-pid, SIGKILL)
-    kill(pid, SIGKILL)
+    signalFamily(SIGKILL)
   }
 
   func stop(graceMs: Int, done: @escaping () -> Void) {
     guard !exited else { return done() }
     stopWaiters.append(done)
     connection?.close()
-    kill(-pid, SIGTERM)
-    kill(pid, SIGTERM)
+    signalFamily(SIGTERM)
     guard killTimer == nil else { return }
     let item = DispatchWorkItem { [weak self] in
       guard let self, !self.exited else { return }
-      kill(-self.pid, SIGKILL)
-      kill(self.pid, SIGKILL)
+      self.signalFamily(SIGKILL)
     }
     killTimer = item
     queue.asyncAfter(deadline: .now() + .milliseconds(max(0, graceMs)), execute: item)
@@ -243,26 +253,23 @@ final class PluginProcess {
 
   func killNow() {
     guard !exited else { return }
-    kill(-pid, SIGKILL)
-    kill(pid, SIGKILL)
+    signalFamily(SIGKILL)
   }
 
   func terminateForQuit(within seconds: TimeInterval) {
     guard !exited else { return }
     connection?.close()
-    kill(-pid, SIGTERM)
-    kill(pid, SIGTERM)
+    signalFamily(SIGTERM)
     let deadline = Date().addingTimeInterval(seconds)
     var status: Int32 = 0
     while Date() < deadline {
       if waitpid(pid, &status, WNOHANG) == pid {
         exited = true
-        kill(-pid, SIGKILL)
+        signalFamily(SIGKILL)
         return
       }
       usleep(20_000)
     }
-    kill(-pid, SIGKILL)
-    kill(pid, SIGKILL)
+    signalFamily(SIGKILL)
   }
 }

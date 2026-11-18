@@ -198,7 +198,12 @@ leaves, the defaults unwind in the order they were applied.
 
 - **Starts** when the plugin is turned on, at launch for plugins that are on (after the first window), and when you
   press Restart. **Stops** when it is turned off, removed, its manifest changes, or Ardia quits: Ardia closes its
-  channel, sends SIGTERM to its process group and SIGKILL 3 s later (at quit, after 1 s).
+  channel, sends SIGTERM to the helper's processes and SIGKILL 3 s later (at quit, after 1 s). The helper's processes
+  are its process group plus every descendant, found from the process table just before each signal and remembered
+  every 10 s with their start times, so a child that started its own session (`setsid`, Node's `detached`) or was
+  orphaned when its parent exited still goes, and a reused process id is never signalled. When the helper exits on
+  its own, the processes remembered for it are ended too. A helper may start other programs (the AI plugin runs the
+  Claude Code CLI).
 - **Supervised.** A helper that exits with a failure or a signal, or whose own process goes over `memoryMB` (a watchdog:
   its physical footprint checked every 10 s, not a hard cap, and its child processes aren't counted), is restarted after
   1, 2, 4, 8 then 16 s. After 5 failures within 10 minutes it stays stopped and its row says it crashed, with Restart.
@@ -226,7 +231,9 @@ leaves, the defaults unwind in the order they were applied.
   a default-allow profile), so a helper could script an app that accepts them, Ardia's own AppleScript included, which
   stays behind its own settings; files your config folder links to outside your home are readable; the system services
   every program reaches are reachable; a local server it starts may listen on any address (bind served pages to
-  `127.0.0.1`); it isn't limited in CPU. If Ardia crashes, a helper that doesn't exit when its channel closes keeps
+  `127.0.0.1`); it isn't limited in CPU. A program that detaches twice onto launchd (a double fork) between two of those checks, or that is started
+  through launchd or another app, is out of Ardia's reach and keeps running, still inside the sandbox, until it is
+  stopped by hand. If Ardia crashes, a helper that doesn't exit when its channel closes keeps
   running until it is stopped by hand. So the permissions below are what Ardia hands a helper through its channel and
   what the sandbox holds it to on disk and on the network; the gaps above are outside them. Issue #2495 moves the
   helper to a deny-by-default profile.
@@ -300,7 +307,7 @@ The control socket's protocol 4 adds `plugins`, `plugins.enable` (`{"waiting": t
   command bar entries (`commands.ts`), page tabs (`pages.ts`, `pageNames.ts`), consent copy (`consent.ts`), socket methods
   (`socketMethods.ts`).
 - `platform/plugins.ts` binds `ArdiaPlugins` (`packages/shell/ios/PluginsModule.swift`, `PluginFolder.swift`,
-  `PluginProcess.swift`, `PluginCore/PluginSandbox.swift` and `PluginCore/PluginFiles.swift` (tested by `packages/shell/plugin-tests`, run by `swift test` in `packages/shell`), `PluginPageView.swift`, `PluginSchemeHandler.swift`).
+  `PluginProcess.swift`, `PluginCore/PluginSandbox.swift`, `PluginCore/PluginFiles.swift` and `PluginCore/PluginProcessTree.swift` (tested by `packages/shell/plugin-tests`, run by `swift test` in `packages/shell`), `PluginPageView.swift`, `PluginSchemeHandler.swift`).
 - UI: `components/settings/panes/Plugins.tsx`, `components/plugins/PluginPage.tsx` (rendered by `components/pages/InternalPage.tsx`).
 - The example plugin used by the tests: `tests/fixtures/plugins/example/`.
 
