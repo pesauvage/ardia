@@ -24,6 +24,20 @@ LEGACY = {
 }
 
 
+def exchange_supported(where: Path) -> bool:
+    first, second = where / "swap-probe-a", where / "swap-probe-b"
+    first.mkdir()
+    second.mkdir()
+    try:
+        plugins_cli.rename_exchange(first, second)
+        return True
+    except (NotImplementedError, OSError):
+        return False
+    finally:
+        first.rmdir()
+        second.rmdir()
+
+
 class PluginsCliTest(unittest.TestCase):
     def setUp(self):
         self.data = Path(tempfile.mkdtemp(prefix="ardia-plugins-"))
@@ -200,6 +214,8 @@ class PluginsCliTest(unittest.TestCase):
         self.assertEqual([p.read_text() for p in kept], [before], f"the old install is kept beside it: {err}")
 
     def test_a_forced_replace_swaps_the_folders_in_one_step(self):
+        if not exchange_supported(self.data):
+            self.skipTest("this system can't swap two folders in one step; the fallback is tested separately")
         self.assertEqual(self.ardia("install", str(EXAMPLE))[0], 0)
         target = self.data / "config" / "plugins" / "example"
         (target / "old-marker").write_text("old")
