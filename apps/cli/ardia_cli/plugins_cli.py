@@ -85,7 +85,7 @@ SIDES = ("left", "right", "top", "bottom")
 
 def current_manifest(manifest: dict, known: int):
     given = manifest.get("manifest")
-    if given is not None and (isinstance(given, bool) or not isinstance(given, int) or given < 0):
+    if "manifest" in manifest and (isinstance(given, bool) or not isinstance(given, int) or given < 0):
         return None, ["manifest must be a whole number, the manifest's version"]
     if given is not None and given > known:
         return None, [f"manifest {given} needs a newer Ardia (this one reads up to {known})"]
@@ -238,7 +238,8 @@ def manifest_problems(args, manifest: dict) -> list[str]:
     if doc is None:
         return problems
     problems += schema_problems(where, doc, schema)
-    problems += rule_problems(doc, schema.get("x-ardia-rules") or {})
+    if not problems:
+        problems += rule_problems(doc, schema.get("x-ardia-rules") or {})
     name = doc.get("name")
     if not isinstance(name, str) or not NAME.match(name):
         problems.append("name must be 1 to 40 lowercase letters, digits and dashes, starting with a letter or digit")

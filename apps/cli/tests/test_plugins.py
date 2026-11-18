@@ -165,6 +165,15 @@ class PluginsCliTest(unittest.TestCase):
         self.assertEqual(status, 1, "settings defaults can't be checked without Ardia's config schema")
         self.assertIn("config.schema.json", out)
 
+    def test_a_null_manifest_version_and_wrongly_typed_names_are_problems_not_crashes(self):
+        for manifest in ({"name": "x", "manifest": None}, {"manifest": 1, "name": "x", "tools": [{"name": ["a"], "title": "T"}], "process": {"run": ["/bin/sh"]}}, {"manifest": 1, "name": "x", "settings": {"rows": [{"key": "k", "title": "K", "type": "choice", "default": "a", "choices": [{"value": ["a"], "title": "A"}, {"value": "b", "title": "B"}]}]}}):
+            folder = self.data / "typed" / str(len(list((self.data).glob("typed/*"))))
+            folder.mkdir(parents=True)
+            (folder / "plugin.json").write_text(json.dumps(manifest))
+            status, out, err = self.ardia("check", str(folder) + "/")
+            self.assertEqual(status, 1, out + err)
+            self.assertNotIn("Traceback", err)
+
     def test_list_and_remove_work_from_the_files_when_ardia_is_away(self):
         self.ardia("install", str(EXAMPLE))
         status, out, _ = self.ardia("list", "--json")
