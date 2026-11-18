@@ -5,7 +5,7 @@ import { onConfigChange } from "../../platform/configFolder";
 import { useBrowser } from "../browser/store";
 import { notePlugin } from "../telemetry/pluginCounts";
 import { listingOf } from "./appChecks";
-import { applyDefaults, claimsOf, restoreDefaults, spliceApplied } from "./defaults";
+import { applySettingsPatch, planDisable, planEnable, spliceApplied } from "./defaults";
 import { writePluginRecords } from "./savedState";
 import { activeManifest, currentPlugins, NO_RECORD, recordOf, usePlugins, type PluginListing, type PluginRecord } from "./store";
 import { processStopped, stopProcess, superviseProcess, supervisedNames } from "./process";
@@ -112,10 +112,10 @@ export function enablePlugin(name: string, hash: string): boolean {
   const before = recordOf(currentPlugins(), name);
   const values = { ...defaultValues(manifest), ...before.values };
   const kept = before.enabled && before.approved === hash;
-  if (!kept) restoreDefaults(before.applied, claimsOf(currentPlugins().records, name));
-  const applied = kept ? before.applied : applyDefaults(manifest, currentPlugins().records, name);
-  const saved = updateRecord(name, () => ({ enabled: true, approved: hash, values, applied }));
-  if (!saved) return false;
+  const records = currentPlugins().records;
+  const plan = kept ? { patch: {}, applied: before.applied } : planEnable(manifest, records, name, before.applied);
+  if (!saveRecords({ ...records, [name]: { enabled: true, approved: hash, values, applied: plan.applied } })) return false;
+  applySettingsPatch(plan.patch);
   usePlugins.setState({ consent: null });
   notePlugin("plugin_enables");
   reconcilePlugins();
@@ -125,12 +125,13 @@ export function enablePlugin(name: string, hash: string): boolean {
 export function disablePlugin(name: string): boolean {
   const before = recordOf(currentPlugins(), name);
   if (!before.enabled) return true;
-  restoreDefaults(before.applied, claimsOf(currentPlugins().records, name));
+  const patch = planDisable(currentPlugins().records, name);
   const records = spliceApplied(currentPlugins().records, name);
-  const saved = saveRecords({ ...records, [name]: { ...before, enabled: false, applied: {} } });
+  if (!saveRecords({ ...records, [name]: { ...before, enabled: false, applied: {} } })) return false;
+  applySettingsPatch(patch);
   notePlugin("plugin_disables");
   reconcilePlugins();
-  return saved;
+  return true;
 }
 
 export async function removePlugin(name: string): Promise<{ ok: boolean; reason?: string }> {

@@ -77,15 +77,17 @@ export function spliceApplied(records: Record<string, PluginRecord>, leaving: st
   return out;
 }
 
-export function applyDefaults(m: PluginManifest, records: Record<string, PluginRecord>, name: string): PluginRecord["applied"] {
-  const s = useBrowser.getState();
-  const { patch, applied } = planDefaults(m, s.settings, keysConfigSets(), claimsOf(records, name), nextOrder(records));
-  if (Object.keys(patch).length) s.updateSettings(patch);
-  return applied;
+export function planEnable(m: PluginManifest, records: Record<string, PluginRecord>, name: string, before: PluginRecord["applied"]): { patch: Partial<Settings>; applied: PluginRecord["applied"] } {
+  const settings = useBrowser.getState().settings;
+  const fileKeys = keysConfigSets();
+  const restore = planRestore(before, settings, claimsOf(records, name), fileKeys);
+  const plan = planDefaults(m, { ...settings, ...restore }, fileKeys, claimsOf(records, name), nextOrder(records));
+  return { patch: { ...restore, ...plan.patch }, applied: plan.applied };
 }
 
-export function restoreDefaults(applied: PluginRecord["applied"], claims: Claims = new Map()) {
-  const s = useBrowser.getState();
-  const patch = planRestore(applied, s.settings, claims, keysConfigSets());
-  if (Object.keys(patch).length) s.updateSettings(patch);
+export const planDisable = (records: Record<string, PluginRecord>, name: string): Partial<Settings> =>
+  planRestore(records[name]?.applied ?? {}, useBrowser.getState().settings, claimsOf(records, name), keysConfigSets());
+
+export function applySettingsPatch(patch: Partial<Settings>) {
+  if (Object.keys(patch).length) useBrowser.getState().updateSettings(patch);
 }

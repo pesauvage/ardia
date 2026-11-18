@@ -194,7 +194,8 @@ plugin folder's identity on disk (device and inode, after links) in `plugins.jso
 
 `plugins.json` (version 1): `{ "plugins": { "<name>": { "enabled", "approved" (manifest hash), "values" (row values),
 "applied" ({ key: { value, previous, order } }) } } }`: `order` counts up as plugins are turned on, so whichever
-leaves, the defaults unwind in the order they were applied.
+leaves, the defaults unwind in the order they were applied. Turning a plugin on or off saves `plugins.json` first and changes
+settings only once it is saved, so a failed save changes nothing.
 
 ## The helper
 

@@ -531,3 +531,31 @@ test("a served page's helper gets this run's page token, which the page view mak
   assert.deepEqual((await ask("page.serve", { url: "http://127.0.0.1:4321/" }, run)).result, { ok: true, pageToken });
   lifecycle.disablePlugin("example");
 });
+
+test("when plugins.json can't be saved, turning a plugin on or off changes no settings", async () => {
+  S().hydrate({});
+  startPlugins();
+  for (const name of Object.keys(P().records)) lifecycle.disablePlugin(name);
+  const original = S().settings.commandBarStart;
+  await install();
+  assert.ok(lifecycle.requestPluginConsent("example"));
+  const { hash } = P().consent;
+  stub.refusedWrites.on = true;
+  try {
+    assert.equal(lifecycle.enablePlugin("example", hash), false);
+    assert.deepEqual(S().settings.commandBarStart, original, "a failed enable leaves the setting as it was");
+  } finally {
+    stub.refusedWrites.on = false;
+  }
+  assert.ok(lifecycle.enablePlugin("example", hash));
+  assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 5 } });
+  stub.refusedWrites.on = true;
+  try {
+    assert.equal(lifecycle.disablePlugin("example"), false);
+    assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 5 } }, "a failed disable keeps the plugin's value it can still restore");
+  } finally {
+    stub.refusedWrites.on = false;
+  }
+  assert.ok(lifecycle.disablePlugin("example"));
+  assert.deepEqual(S().settings.commandBarStart, original);
+});
