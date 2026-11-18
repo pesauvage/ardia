@@ -8,10 +8,10 @@ import { canChooseDeveloperMode, developerModeHost, developerModeOn, developerMo
 import { noteDeveloperBarPress, takeDeveloperModeCounts } from "../telemetry/developerModeCounts.ts";
 
 test("local addresses turn Developer Mode on by themselves, and other sites start off", () => {
-  for (const url of ["http://localhost:5173/", "http://LOCALHOST:3000/app", "http://127.0.0.1:8080", "http://app.localhost:3000/", "http://my_app.localhost/", "http://[::1]:4000/", "http://0.0.0.0:8000", "https://localhost/"]) {
+  for (const url of ["http://localhost:5173/", "http://LOCALHOST:3000/app", "http://127.0.0.1:8080", "http://127.1:3000/", "http://127.0.1/", "http://app.localhost:3000/", "http://my_app.localhost/", "http://[::1]:4000/", "http://0.0.0.0:8000", "https://localhost/"]) {
     assert.equal(developerModeOn({}, url), true, url);
   }
-  for (const url of ["https://github.com/", "http://localhost.example.com/", "https://example.com/localhost", "", "about:blank", "file:///tmp/a.html", "ardia://settings", "http://user@github.com/"]) {
+  for (const url of ["https://github.com/", "http://localhost.example.com/", "https://example.com/localhost", "", "about:blank", "file:///tmp/a.html", "ardia://settings", "http://user@github.com/", "http://127/"]) {
     assert.equal(developerModeOn({}, url), false, url);
   }
 });

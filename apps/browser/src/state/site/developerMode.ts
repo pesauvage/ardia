@@ -12,7 +12,7 @@ import { activeTabId } from "../browser/model";
 export type DeveloperModeSites = Settings["developerModeSites"];
 
 const WEB_HOST = /^https?:\/\/(?:[^@/?#]*@)?(\[[0-9a-f:.]+\]|[^:/?#]+)/i;
-const LOOPBACK_HOST = /^(?:localhost|[^/?#:@\s]+\.localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1\])$/i;
+const LOOPBACK_HOST = /^(?:localhost|[^/?#:@\s]+\.localhost|127(?:\.\d{1,3}){1,3}|0\.0\.0\.0|\[::1\])$/i;
 
 export function developerModeHost(url: string): string | null {
   const host = WEB_HOST.exec(url)?.[1];
