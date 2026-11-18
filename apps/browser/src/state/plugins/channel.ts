@@ -92,7 +92,9 @@ async function openTabs(c: Connection, m: PluginManifest, params: Record<string,
     return failure("bad_request", `open takes urls: 1 to ${MAX_OPEN_URLS} http or https addresses, with no credentials, spaces or control characters.`);
   const current = () => acceptsRun(c.name, c.run) && !!activeManifest(currentPlugins(), c.name)?.permissions.includes("commands");
   const body = await applyMethod({ ops: [{ op: "open", urls, ...(activate === true ? { activate: true } : {}) }] }, current);
-  return body;
+  const applied = "result" in body ? (body.result as { ok?: boolean; results?: { tabs?: string[] }[] }) : null;
+  if (!applied?.ok) return failure(current() ? "failed" : "refused", current() ? "The tabs couldn't open." : "This run of the helper has ended or lost commands, so nothing opened.");
+  return { result: { ok: true, tabs: applied.results?.[0]?.tabs ?? [] } };
 }
 
 function answer(c: Connection, m: PluginManifest, method: string, params: Record<string, unknown>): Body | Promise<Body> {

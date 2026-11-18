@@ -631,6 +631,15 @@ test("open takes only http and https URLs, at most ten, refusing everything else
   lifecycle.disablePlugin("example");
 });
 
+test("open answers only with whether it worked and the tabs it created", async () => {
+  const run = await enabled();
+  S().createWindow({ url: "https://a.example/" });
+  const reply = await ask("open", { urls: ["https://b.example/one"] }, run);
+  const created = Object.values(S().tabs).filter((t) => t.url === "https://b.example/one").map((t) => t.id);
+  assert.deepEqual(reply.result, { ok: true, tabs: created }, "no snapshots, no other tab's id or URL");
+  lifecycle.disablePlugin("example");
+});
+
 test("an open queued when its run ends never runs", async () => {
   const run = await enabled();
   S().createWindow({ url: "https://a.example/" });
