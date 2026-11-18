@@ -105,6 +105,10 @@ final class PluginProcessTreeTests: XCTestCase {
   }
 }
 
+struct SpawnFailed: Error {
+  let status: Int32
+}
+
 final class PluginResponsibilityTests: XCTestCase {
   static let cli = """
     import os, subprocess, sys, time
@@ -117,8 +121,8 @@ final class PluginResponsibilityTests: XCTestCase {
   func testAHelpersCliAndItsChildAreFoundAfterTheCliParentExited() throws {
     guard PluginProcessTree.tracksResponsibility else { throw XCTSkip("this macOS has no responsibility calls") }
     let marker = FileManager.default.temporaryDirectory.appendingPathComponent("tree-\(UUID().uuidString)").path
-    let script = "/usr/bin/python3 -c '\(Self.cli.replacingOccurrences(of: "'", with: "'\\''"))' \(marker) & exit 0"
-    let helperScript = "/bin/sh -c \"$1\"; sleep 60"
+    let script = "/usr/bin/python3 -c '\(Self.cli.replacingOccurrences(of: "'", with: "'\\''"))' \"$1\" & exit 0"
+    let helperScript = "/bin/sh -c \"$1\" cli \"$2\"; sleep 60"
     var attributes: posix_spawnattr_t?
     posix_spawnattr_init(&attributes)
     defer { posix_spawnattr_destroy(&attributes) }
@@ -126,9 +130,10 @@ final class PluginResponsibilityTests: XCTestCase {
     posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP))
     XCTAssertTrue(PluginProcessTree.disclaim(&attributes))
     var helper: pid_t = 0
-    let argv = ["/bin/sh", "-c", helperScript, "helper", script].map { strdup($0) } + [nil]
+    let argv = ["/bin/sh", "-c", helperScript, "helper", script, marker].map { strdup($0) } + [nil]
     defer { argv.forEach { free($0) } }
-    XCTAssertEqual(posix_spawn(&helper, "/bin/sh", nil, &attributes, argv, environ), 0)
+    let spawned = posix_spawn(&helper, "/bin/sh", nil, &attributes, argv, environ)
+    guard spawned == 0, helper > 0 else { throw SpawnFailed(status: spawned) }
     defer {
       kill(helper, SIGKILL)
       waitpid(helper, nil, 0)
@@ -139,8 +144,8 @@ final class PluginResponsibilityTests: XCTestCase {
       pids = ((try? String(contentsOfFile: marker, encoding: .utf8)) ?? "").split(separator: " ").compactMap { pid_t($0) }
       usleep(50_000)
     }
-    XCTAssertEqual(pids.count, 2, "the CLI and its child started")
     defer { pids.forEach { kill($0, SIGKILL) } }
+    guard pids.count == 2 else { return XCTFail("the CLI and its child didn't both start: \(pids)") }
     XCTAssertEqual(PluginProcessTree.entry(pids[0])?.ppid, 1, "the CLI's parent shell has exited")
     let family = PluginProcessTree.family(of: helper)
     XCTAssertTrue(pids.allSatisfy { pid in family.contains { $0.pid == pid } }, "the orphaned CLI and its child are the helper's")
@@ -164,7 +169,8 @@ final class PluginFamilyTests: XCTestCase {
     var pid: pid_t = 0
     let argv = ["/usr/bin/python3", "-c", script, argument].map { strdup($0) } + [nil]
     defer { argv.forEach { free($0) } }
-    XCTAssertEqual(posix_spawn(&pid, "/usr/bin/python3", nil, &attributes, argv, environ), 0)
+    let spawned = posix_spawn(&pid, "/usr/bin/python3", nil, &attributes, argv, environ)
+    guard spawned == 0, pid > 0 else { throw SpawnFailed(status: spawned) }
     return pid
   }
 
