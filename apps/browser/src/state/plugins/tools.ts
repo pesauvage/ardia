@@ -9,7 +9,7 @@ export const MAX_TOOL_JSON = 1 << 20;
 export type ToolCaller = { kind: "command" } | { kind: "cli" } | { kind: "plugin"; plugin: string };
 export type ToolOutcome = { ok: true; result: unknown } | { ok: false; code: "refused" | "failed" | "bad_request"; message: string };
 
-type Pending = { id: string; plugin: string; run: number; consent: ConsentToken | null; settle: (outcome: ToolOutcome) => void; timer: ReturnType<typeof setTimeout> };
+type Pending = { id: string; plugin: string; run: number; caller: string | null; consent: ConsentToken | null; settle: (outcome: ToolOutcome) => void; timer: ReturnType<typeof setTimeout> };
 
 const pending = new Map<string, Pending>();
 let seq = 0;
@@ -54,7 +54,7 @@ export function callTool(plugin: string, tool: string, input: unknown, caller: T
     const timer = setTimeout(() => {
       if (finish(id, failed("failed", `${plugin} didn't answer ${tool} in ${spec.timeout} s.`))) callPlugin(plugin, run, JSON.stringify({ call: id, cancel: true }));
     }, spec.timeout * 1000);
-    pending.set(id, { id, plugin, run, consent, settle, timer });
+    pending.set(id, { id, plugin, run, caller: caller.kind === "plugin" ? caller.plugin : null, consent, settle, timer });
     try {
       callPlugin(plugin, run, line);
     } catch (error) {
@@ -82,7 +82,10 @@ export function answerCall(plugin: string, run: number, params: Record<string, u
 }
 
 export function dropCalls(plugin: string) {
-  for (const call of [...pending.values()]) if (call.plugin === plugin) finish(call.id, failed("failed", `${plugin} stopped.`));
+  for (const call of [...pending.values()]) {
+    if (call.plugin === plugin) finish(call.id, failed("failed", `${plugin} stopped.`));
+    else if (call.caller === plugin && finish(call.id, failed("failed", `${plugin}, which asked, stopped.`))) callPlugin(call.plugin, call.run, JSON.stringify({ call: call.id, cancel: true }));
+  }
 }
 
 export const waitingCalls = () => pending.size;

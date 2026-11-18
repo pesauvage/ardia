@@ -866,6 +866,33 @@ test("a disable reported to the ardia command, and a removal, wait until plugins
   assert.deepEqual(await pluginSocketMethod("plugins.disable", { name: "example" }), { result: { ok: true } });
 });
 
+test("when a helper that called another plugin's tools stops, its waiting calls are released and cancelled", async () => {
+  await enabled();
+  const second = JSON.parse(FIXTURE);
+  second.name = "second";
+  host.folders = [{ name: "example", status: "ok", text: FIXTURE }, { name: "second", status: "ok", text: JSON.stringify(second) }];
+  await lifecycle.rescanPlugins(consentToken());
+  assert.ok(lifecycle.requestPluginConsent("second") && lifecycle.enablePlugin("second", P().consent.hash));
+  await settle();
+  const caller = P().processes.example.run;
+  const callee = P().processes.second.run;
+  for (let i = 0; i < 16; i++) helper("tools.call", { plugin: "second", tool: "seen", input: {} }, caller);
+  await settle();
+  const full = await Promise.race([callTool("second", "seen", {}, { kind: "cli" }), settle().then(() => null)]);
+  assert.match(full?.message ?? "", /too many calls/, "the caller's 16 calls fill second's slots");
+  const sentBefore = host.events.length;
+  restartProcess("example");
+  await settle();
+  const cancels = host.events.slice(sentBefore).filter((e) => e.name === "second" && e.run === callee && JSON.parse(e.line).cancel === true);
+  assert.equal(cancels.length, 16, "second is told to stop each call its caller can no longer take");
+  const after = await Promise.race([callTool("second", "seen", {}, { kind: "cli" }), settle().then(() => null)]);
+  assert.equal(after, null, "a new call is waiting on second, not refused");
+  lifecycle.disablePlugin("second");
+  lifecycle.disablePlugin("example");
+  host.folders = [{ name: "example", status: "ok", text: FIXTURE }];
+  await lifecycle.rescanPlugins(consentToken());
+});
+
 test("an open queued when its run ends never runs", async () => {
   const run = await enabled();
   S().createWindow({ url: "https://a.example/" });

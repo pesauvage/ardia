@@ -294,8 +294,8 @@ Requests from the helper (`{"id", "method", "params"}`):
 A method the manifest doesn't allow is `refused`. Page messages arrive as `{"pageMessage", "view"}`. Events from Ardia: `plugin.values` (`{"values"}`) when you change a
 row, plus the subscribed events. Calls to a tool arrive as `{"call": "c4", "tool": "hello", "input": {…},
 "caller": {"kind": "command" | "cli" | "plugin", "plugin"?}, "deadline": ms}`; the helper answers with `result`. A
-call past its deadline is answered with an error for the caller and `{"call": "c4", "cancel": true}` is sent; a late
-`result` is `bad_request`. At most 16 calls wait per helper.
+call past its deadline, or one whose calling plugin's helper stops, is answered with an error for the caller and
+`{"call": "c4", "cancel": true}` is sent; a late `result` is `bad_request`. At most 16 calls wait per helper.
 
 ### Pages and their helper
 
