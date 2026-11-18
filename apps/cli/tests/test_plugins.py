@@ -74,6 +74,33 @@ class PluginsCliTest(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("memoryMB", err)
 
+    def test_check_refuses_every_manifest_the_app_refuses(self):
+        cases = json.loads((EXAMPLE.parent / "rejected-manifests.json").read_text())
+        for case in cases:
+            folder = self.data / "cases" / str(cases.index(case))
+            folder.mkdir(parents=True)
+            (folder / "plugin.json").write_text(json.dumps(case["manifest"]))
+            status, out, _ = self.ardia("check", str(folder) + "/")
+            self.assertEqual(status, 1, f"{case['why']}: {out}")
+        self.assertEqual(self.ardia("check", str(EXAMPLE) + "/")[0], 0)
+
+    def test_install_checks_the_copy_it_publishes(self):
+        source = self.data / "changing"
+        shutil.copytree(EXAMPLE, source)
+        real_copy = plugins_cli.copy_tree
+
+        def swap_while_copying(src, dst):
+            real_copy(src, dst)
+            manifest = json.loads((dst / "plugin.json").read_text())
+            manifest["permissions"] = ["fullUrls"]
+            (dst / "plugin.json").write_text(json.dumps(manifest))
+
+        with mock.patch.object(plugins_cli, "copy_tree", side_effect=swap_while_copying):
+            status, _, err = self.ardia("install", str(source))
+        self.assertEqual(status, 1)
+        self.assertIn("fullUrls needs tabs", err)
+        self.assertFalse((self.data / "config" / "plugins" / "example").exists())
+
     def test_list_and_remove_work_from_the_files_when_ardia_is_away(self):
         self.ardia("install", str(EXAMPLE))
         status, out, _ = self.ardia("list", "--json")

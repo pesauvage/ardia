@@ -66,6 +66,8 @@ def plugins_folder(args) -> Path:
 def read_manifest(path: Path):
     if path.is_dir():
         path = path / MANIFEST
+    if path.is_symlink():
+        raise config_files.ConfigError(f"{path} is a link; a plugin's {MANIFEST} must be a file in its folder")
     if not path.is_file():
         raise config_files.ConfigError(f"{path} isn't a plugin: it has no {MANIFEST}")
     if path.stat().st_size > MAX_MANIFEST:
@@ -73,17 +75,163 @@ def read_manifest(path: Path):
     return config_files.read_object(path, str(path))
 
 
-def manifest_problems(args, manifest: dict) -> list[str]:
+SIDES = ("left", "right", "top", "bottom")
+
+
+def current_manifest(manifest: dict, known: int):
+    given = manifest.get("manifest")
+    if given is not None and (isinstance(given, bool) or not isinstance(given, int) or given < 0):
+        return None, ["manifest must be a whole number, the manifest's version"]
+    if given is not None and given > known:
+        return None, [f"manifest {given} needs a newer Ardia (this one reads up to {known})"]
+    if given:
+        return manifest, []
+    doc = {key: value for key, value in manifest.items() if key not in ("settings", "reset")}
+    if "settings" in manifest:
+        doc["settings"] = {"defaults": manifest["settings"]}
+    doc["manifest"] = known
+    return doc, []
+
+
+def is_plugin_path(value) -> bool:
+    if not isinstance(value, str) or not value or len(value.encode()) > 1024 or value.startswith("/") or "\\" in value or "\0" in value:
+        return False
+    return all(part not in ("", ".", "..") for part in value.split("/"))
+
+
+def named(items) -> list[dict]:
+    return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+
+def duplicates(values) -> list:
+    seen, twice = set(), []
+    for value in values:
+        if isinstance(value, str) and value in seen and value not in twice:
+            twice.append(value)
+        seen.add(value)
+    return twice
+
+
+def row_problems(rows: list[dict]) -> list[str]:
+    problems = []
+    for i, row in enumerate(rows):
+        at, kind, default = f"settings.rows[{i}]", row.get("type"), row.get("default")
+        if kind != "choice" and "choices" in row:
+            problems.append(f"{at}.choices only goes with type choice")
+        if kind == "toggle" and not isinstance(default, bool):
+            problems.append(f"{at}.default must be true or false")
+        if kind == "text" and (not isinstance(default, str) or len(default) > 200):
+            problems.append(f"{at}.default must be text of at most 200 characters")
+        if kind == "choice":
+            choices = [c.get("value") for c in named(row.get("choices"))]
+            if "choices" not in row:
+                problems.append(f"{at}.choices must be a list of 2 to 12 choices")
+            if default not in choices:
+                problems.append(f"{at}.default must be one of its choices' values")
+            problems += [f"{at}.choices has two choices named {v}" for v in duplicates(choices)]
+    return problems
+
+
+def command_problems(commands: list[dict], rows: list[dict], tools: list[dict], page, permissions: list) -> list[str]:
+    problems = []
+    tool_names = {t.get("name") for t in tools}
+    for i, command in enumerate(commands):
+        at, has_tool, has_open = f"commands[{i}]", "tool" in command, "open" in command
+        if has_tool == has_open:
+            problems.append(f'{at} needs either tool (one of the plugin\'s tools) or open ("tab" or "split")')
+            continue
+        if has_tool:
+            problems += [f"{at}.{key} only goes with open" for key in ("context", "side", "sideSetting") if key in command]
+            if command["tool"] not in tool_names:
+                problems.append(f"{at}.tool: {command['tool']} isn't one of this plugin's tools")
+            continue
+        if "input" in command:
+            problems.append(f"{at}.input only goes with tool")
+        if command.get("open") != "split" and ("side" in command or "sideSetting" in command):
+            problems.append(f"{at}: side and sideSetting only go with open: split")
+        if page is None:
+            problems.append(f"{at}.open needs a page")
+        if command.get("context") is True and "tabs" not in permissions:
+            problems.append(f"{at}.context needs the tabs permission")
+        if "sideSetting" in command:
+            row = next((r for r in rows if r.get("key") == command["sideSetting"]), None)
+            if not row or row.get("type") != "choice" or not all(c.get("value") in SIDES for c in named(row.get("choices"))):
+                problems.append(f"{at}.sideSetting must name a choice row whose values are left, right, top or bottom")
+    return problems
+
+
+def rule_problems(doc: dict, rules: dict) -> list[str]:
+    permissions = doc.get("permissions") if isinstance(doc.get("permissions"), list) else []
+    settings = doc.get("settings") if isinstance(doc.get("settings"), dict) else {}
+    defaults = settings.get("defaults") if isinstance(settings.get("defaults"), dict) else {}
+    rows, tools, commands = named(settings.get("rows")), named(doc.get("tools")), named(doc.get("commands"))
+    page = doc.get("page") if isinstance(doc.get("page"), dict) else None
+    process = doc.get("process") if isinstance(doc.get("process"), dict) else None
+    hooks = doc.get("hooks") if isinstance(doc.get("hooks"), list) else []
+    problems = []
+    if "fullUrls" in permissions and "tabs" not in permissions:
+        problems.append("permissions: fullUrls needs tabs")
+    problems += [f"settings.defaults: {key} needs its own approval in Settings, so a plugin can't set it" for key in rules.get("approvedSettings", []) if key in defaults]
+    problems += row_problems(rows)
+    for where, what, values in (("settings.rows", "rows", [r.get("key") for r in rows]), ("tools", "tools", [t.get("name") for t in tools]), ("commands", "commands", [c.get("name") for c in commands])):
+        problems += [f"{where} has two {what} named {v}" for v in duplicates(values)]
+    problems += command_problems(commands, rows, tools, page, permissions)
+    if page is not None:
+        if ("file" in page) == (page.get("served") is True):
+            problems.append("page needs either file (a file in the plugin's folder) or served: true")
+        if "file" in page and not is_plugin_path(page.get("file")):
+            problems.append("page.file must be a path inside the plugin's folder, like page/index.html")
+        if page.get("served") is True and "network" not in permissions:
+            problems.append("page.served needs the network permission: Ardia can't hold a page its helper serves to this Mac")
+        if doc.get("name") in rules.get("reservedPageNames", []):
+            problems.append(f"name: {doc['name']} is one of Ardia's own pages (ardia://{doc['name']}), so a plugin with a page can't use it")
+    if process is not None:
+        run = process.get("run")
+        program = run[0] if isinstance(run, list) and run and isinstance(run[0], str) else None
+        if program and not program.startswith("/") and "/" in program and not is_plugin_path(program):
+            problems.append("process.run[0] must be a file in the plugin's folder, an absolute path or a program name")
+    else:
+        needs = (("tool commands", any("tool" in c for c in commands)), ("tools", bool(tools)), ("hooks", bool(hooks)), ("page.served", bool(page and page.get("served") is True)))
+        problems += [f"{what} needs a process" for what, used in needs if used]
+    untabbed = set(rules.get("untabbedEvents", []))
+    problems += [f"hooks[{i}]: {hook} needs the tabs permission" for i, hook in enumerate(hooks) if isinstance(hook, str) and hook not in untabbed and "tabs" not in permissions]
+    return problems
+
+
+SAFE_TEXT = re.compile(r"must match \^\(\?=.*\]\{1,(\d+)\}\$$")
+
+
+def shown_rule(message: str) -> str:
+    safe = SAFE_TEXT.search(message)
+    return message[: safe.start()] + f"must be text of 1 to {safe.group(1)} characters, without control or direction characters" if safe else message
+
+
+def schema_problems(where, doc: dict, schema: dict) -> list[str]:
     from ardia_cli.schema_check import validate
 
-    schema = config_files.find_schema(config_files.places(args.data_dir), SCHEMA)
-    problems = []
-    if schema.document is not None and manifest.get("manifest") is not None:
-        problems = [f"{p.to_dict()['key'] or 'plugin.json'}: {p.message}" for p in validate(manifest, schema.document)]
-    name = manifest.get("name")
+    problems = [f"{p.to_dict()['key'] or 'plugin.json'}: {shown_rule(p.message)}" for p in validate(doc, schema)]
+    config = config_files.find_schema(where, "config.schema.json").document
+    settings_schema = ((config or {}).get("properties") or {}).get("settings")
+    defaults = doc["settings"].get("defaults") if isinstance(doc.get("settings"), dict) else None
+    if isinstance(settings_schema, dict) and isinstance(defaults, dict):
+        problems += [f"settings.defaults: {p.message}" for p in validate(defaults, settings_schema)]
+    return problems
+
+
+def manifest_problems(args, manifest: dict) -> list[str]:
+    where = config_files.places(args.data_dir)
+    schema = config_files.find_schema(where, SCHEMA).document
+    known = (((schema or {}).get("properties") or {}).get("manifest") or {}).get("maximum", 1)
+    doc, problems = current_manifest(manifest, known)
+    if doc is None:
+        return problems
+    if schema is not None:
+        problems += schema_problems(where, doc, schema)
+    problems += rule_problems(doc, (schema or {}).get("x-ardia-rules") or {})
+    name = doc.get("name")
     if not isinstance(name, str) or not NAME.match(name):
         problems.append("name must be 1 to 40 lowercase letters, digits and dashes, starting with a letter or digit")
-    return problems
+    return list(dict.fromkeys(problems))
 
 
 def unreachable_exit(error: Unreachable) -> int:
@@ -179,6 +327,10 @@ def cmd_install(args) -> int:
         else:
             staged.mkdir()
             shutil.copy2(source, staged / MANIFEST)
+        copied = read_manifest(staged)
+        problems = manifest_problems(args, copied) + ([] if copied.get("name") == name else [f"its name changed to {copied.get('name')} while it was copied"])
+        if problems:
+            raise config_files.ConfigError("; ".join(problems))
         if target.is_symlink() or target.is_file():
             target.unlink()
         elif target.exists():

@@ -312,6 +312,14 @@ the installed app's); `enable`, `disable` and `call` need Ardia running with CLI
 - `ardia plugins install PATH [--force]`: copies a plugin folder (or a lone `plugin.json`) into the plugin folder,
   after checking it against `plugin.schema.json`. `--force` replaces one already there. The plugin arrives off.
 - `ardia plugins check [NAME|PATH]`: checks manifests.
+
+`check` and `install` hold a manifest to what the app accepts: a version 0 manifest is migrated first and a newer
+version than `plugin.schema.json` knows is refused; then the schema (rows included), the settings defaults against
+`config.schema.json`, and the rules a schema can't state (a command's tool exists, `context` needs `tabs`, a served page
+needs `network`, names are unique, …), with the app's own lists from the schema's `x-ardia-rules` (events that need
+`tabs`, page names Ardia keeps, settings with approvals of their own). Only the app knows whether `requires` fits the
+Ardia that runs it. `install` checks the copy it is about to publish again. `tests/fixtures/plugins/rejected-manifests.json`
+is a list both the app's tests and the CLI's tests refuse.
 - `ardia plugins remove NAME`: through Ardia when it is reachable (as Settings' Remove), else deletes the folder.
 - `ardia plugins enable NAME`, `ardia plugins disable NAME`.
 - `ardia plugins call NAME TOOL [JSON]`: calls a tool and prints its result as JSON (exit 1 on its error).

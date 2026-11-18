@@ -19,6 +19,8 @@ export const UNTABBED_EVENTS: ReadonlySet<string> = new Set([
   "user.active",
 ]);
 
+export const PLUGIN_RULES = { untabbedEvents: [...UNTABBED_EVENTS], approvedSettings: APPROVED_SETTINGS };
+
 const hex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 
 export const manifestHash = (text: string, folderId = "") => hex(sha256(`${text}\u0000${folderId}`));

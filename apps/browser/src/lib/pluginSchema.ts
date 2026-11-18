@@ -1,9 +1,11 @@
 import { JSON_SCHEMA_DIALECT, schemaJson, type JsonSchema } from "./jsonSchema";
+import { RESERVED_PAGE_NAMES } from "./pluginNames";
 import { KEY_PATTERN, LIMITS, MANIFEST_VERSION, NAME_PATTERN, PLUGIN_PERMISSIONS, SPLIT_SIDES, SYMBOL_PATTERN, VERSION_PATTERN } from "./pluginManifest";
 
 export const PLUGIN_SCHEMA_FILE = "plugin.schema.json";
 
-const textOf = (max: number, description?: string): JsonSchema => ({ type: "string", pattern: `^[\\s\\S]{1,${max}}$`, ...(description ? { description } : {}) });
+const UNSAFE_CLASS = "\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069";
+const textOf = (max: number, description?: string): JsonSchema => ({ type: "string", pattern: `^(?=[\\s\\S]*\\S)[^${UNSAFE_CLASS}]{1,${max}}$`, ...(description ? { description } : {}) });
 const closed = (properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema => ({
   type: "object",
   properties,
@@ -26,7 +28,9 @@ const row = closed(
   ["key", "title", "type", "default"],
 );
 
-export function pluginSchema(eventNames: readonly string[]): Record<string, unknown> {
+export type PluginRules = { untabbedEvents: readonly string[]; approvedSettings: readonly string[] };
+
+export function pluginSchema(eventNames: readonly string[], rules: PluginRules): Record<string, unknown> {
   const body: JsonSchema = closed(
     {
       $schema: { type: "string" },
@@ -38,7 +42,7 @@ export function pluginSchema(eventNames: readonly string[]): Record<string, unkn
       requires: { type: "string", pattern: VERSION_PATTERN, description: "The first Ardia version the plugin works with" },
       permissions: { type: "array", maxItems: PLUGIN_PERMISSIONS.length, items: { enum: [...PLUGIN_PERMISSIONS] } },
       settings: {
-        type: "object",
+        ...closed({ defaults: { type: "object", description: "Ardia settings, as in config.json" }, rows: { type: "array", maxItems: LIMITS.rows, items: row } }),
         description: "Version 1: defaults and rows. A file without manifest (version 0) gives Ardia settings here directly.",
       },
       commands: {
@@ -81,7 +85,8 @@ export function pluginSchema(eventNames: readonly string[]): Record<string, unkn
     },
     ["name"],
   );
-  return { $schema: JSON_SCHEMA_DIALECT, title: "Ardia plugin", ...body, $defs: { row } };
+  const appRules = { untabbedEvents: [...rules.untabbedEvents], approvedSettings: [...rules.approvedSettings], reservedPageNames: [...RESERVED_PAGE_NAMES] };
+  return { $schema: JSON_SCHEMA_DIALECT, title: "Ardia plugin", ...body, "x-ardia-rules": appRules };
 }
 
-export const pluginSchemaJson = (eventNames: readonly string[]) => schemaJson(pluginSchema(eventNames));
+export const pluginSchemaJson = (eventNames: readonly string[], rules: PluginRules) => schemaJson(pluginSchema(eventNames, rules));

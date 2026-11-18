@@ -20,11 +20,11 @@
     },
     "title": {
       "type": "string",
-      "pattern": "^[\\s\\S]{1,60}$"
+      "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]{1,60}$"
     },
     "description": {
       "type": "string",
-      "pattern": "^[\\s\\S]{1,200}$"
+      "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]{1,200}$"
     },
     "version": {
       "type": "string",
@@ -49,6 +49,77 @@
     },
     "settings": {
       "type": "object",
+      "properties": {
+        "defaults": {
+          "type": "object",
+          "description": "Ardia settings, as in config.json"
+        },
+        "rows": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,40}$"
+              },
+              "title": {
+                "type": "string",
+                "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]{1,60}$"
+              },
+              "description": {
+                "type": "string",
+                "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]{1,200}$"
+              },
+              "type": {
+                "enum": [
+                  "toggle",
+                  "text",
+                  "choice"
+                ]
+              },
+              "default": {
+                "type": [
+                  "boolean",
+                  "string"
+                ]
+              },
+              "choices": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 12,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "title": {
+                      "type": "string",
+                      "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]{1,60}$"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "value",
+                    "title"
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "title",
+              "type",
+              "default"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false,
       "description": "Version 1: defaults and rows. A file without manifest (version 0) gives Ardia settings here directly."
     },
     "commands": {
@@ -63,7 +134,7 @@
           },
           "title": {
             "type": "string",
-            "pattern": "^[\\s\\S]{1,60}$"
+            "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]{1,60}$"
           },
           "icon": {
             "type": "string",
@@ -75,7 +146,7 @@
             "maxItems": 8,
             "items": {
               "type": "string",
-              "pattern": "^[\\s\\S]{1,40}$"
+              "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]{1,40}$"
             }
           },
           "tool": {
@@ -128,7 +199,7 @@
       "properties": {
         "title": {
           "type": "string",
-          "pattern": "^[\\s\\S]{1,40}$"
+          "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]{1,40}$"
         },
         "icon": {
           "type": "string",
@@ -223,11 +294,11 @@
           },
           "title": {
             "type": "string",
-            "pattern": "^[\\s\\S]{1,60}$"
+            "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]{1,60}$"
           },
           "description": {
             "type": "string",
-            "pattern": "^[\\s\\S]{1,200}$"
+            "pattern": "^(?=[\\s\\S]*\\S)[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]{1,200}$"
           },
           "timeout": {
             "type": "integer",
@@ -248,66 +319,99 @@
   "required": [
     "name"
   ],
-  "$defs": {
-    "row": {
-      "type": "object",
-      "properties": {
-        "key": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_-]{1,40}$"
-        },
-        "title": {
-          "type": "string",
-          "pattern": "^[\\s\\S]{1,60}$"
-        },
-        "description": {
-          "type": "string",
-          "pattern": "^[\\s\\S]{1,200}$"
-        },
-        "type": {
-          "enum": [
-            "toggle",
-            "text",
-            "choice"
-          ]
-        },
-        "default": {
-          "type": [
-            "boolean",
-            "string"
-          ]
-        },
-        "choices": {
-          "type": "array",
-          "minItems": 2,
-          "maxItems": 12,
-          "items": {
-            "type": "object",
-            "properties": {
-              "value": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9_-]{1,40}$"
-              },
-              "title": {
-                "type": "string",
-                "pattern": "^[\\s\\S]{1,60}$"
-              }
-            },
-            "additionalProperties": false,
-            "required": [
-              "value",
-              "title"
-            ]
-          }
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "key",
-        "title",
-        "type",
-        "default"
-      ]
-    }
+  "x-ardia-rules": {
+    "untabbedEvents": [
+      "settings.changed",
+      "app.launched",
+      "app.quitting",
+      "app.activated",
+      "app.deactivated",
+      "system.sleep",
+      "system.wake",
+      "user.idle",
+      "user.active"
+    ],
+    "approvedSettings": [
+      "omniboxProviders",
+      "launchActions"
+    ],
+    "reservedPageNames": [
+      "history",
+      "bookmarks",
+      "downloads",
+      "newtab",
+      "settings",
+      "about",
+      "accessibility",
+      "app-service-internals",
+      "apps",
+      "attribution-internals",
+      "autofill-internals",
+      "blob-internals",
+      "bluetooth-internals",
+      "chrome",
+      "chrome-urls",
+      "components",
+      "connectors-internals",
+      "crashes",
+      "credits",
+      "device-log",
+      "dino",
+      "discards",
+      "download-internals",
+      "extensions",
+      "extensions-internals",
+      "flags",
+      "gcm-internals",
+      "gpu",
+      "help",
+      "histograms",
+      "history-clusters-internals",
+      "indexeddb-internals",
+      "inspect",
+      "interstitials",
+      "invalidations",
+      "local-state",
+      "management",
+      "media-engagement",
+      "media-internals",
+      "memory-internals",
+      "metrics-internals",
+      "net-export",
+      "net-internals",
+      "network-errors",
+      "new-tab-page",
+      "ntp-tiles-internals",
+      "omnibox",
+      "optimization-guide-internals",
+      "password-manager",
+      "password-manager-internals",
+      "policy",
+      "predictors",
+      "prefs-internals",
+      "print",
+      "process-internals",
+      "quota-internals",
+      "reset-password",
+      "safe-browsing",
+      "serviceworker-internals",
+      "signin-internals",
+      "site-engagement",
+      "sync-internals",
+      "system",
+      "terms",
+      "topics-internals",
+      "tracing",
+      "translate-internals",
+      "ukm",
+      "usb-internals",
+      "user-actions",
+      "version",
+      "web-app-internals",
+      "webrtc-internals",
+      "webrtc-logs",
+      "webui-gallery",
+      "whats-new"
+    ]
   }
 }

@@ -121,8 +121,10 @@ test("versions compare by number, a prerelease before its release", () => {
 });
 
 test("the schema closes every block it describes", () => {
-  const schema = pluginSchema(["tab.opened"]);
+  const schema = pluginSchema(["tab.opened"], { untabbedEvents: [], approvedSettings: [] });
   assert.equal(schema.additionalProperties, false);
+  assert.equal(schema.properties.settings.additionalProperties, false);
+  assert.equal(schema.properties.settings.properties.rows.items.additionalProperties, false, "rows are checked, not left in an unused $defs");
   assert.deepEqual(schema.properties.hooks.items.enum, ["tab.opened"]);
   assert.equal(schema.properties.process.additionalProperties, false);
   assert.equal(schema.properties.commands.items.additionalProperties, false);
@@ -131,6 +133,18 @@ test("the schema closes every block it describes", () => {
 test("the CLI's plugin schema fixture is what the app writes", async () => {
   const { PLUGIN_EVENTS } = await import("../state/automation/eventNames.ts");
   const { pluginSchemaJson } = await import("./pluginSchema.ts");
+  const { PLUGIN_RULES } = await import("../state/plugins/appChecks.ts");
   const fixture = readFileSync(new URL("../../../cli/tests/fixtures/plugin.schema.json", import.meta.url), "utf8");
-  assert.equal(pluginSchemaJson(PLUGIN_EVENTS), fixture, "regenerate apps/cli/tests/fixtures/plugin.schema.json");
+  assert.equal(pluginSchemaJson(PLUGIN_EVENTS, PLUGIN_RULES), fixture, "regenerate apps/cli/tests/fixtures/plugin.schema.json");
+});
+
+test("every manifest in the shared rejected list is refused, the same list ardia plugins check refuses", async () => {
+  const { appProblems } = await import("../state/plugins/appChecks.ts");
+  const { useBrowser } = await import("../state/browser/store.ts");
+  const cases = JSON.parse(readFileSync(new URL("../../../../tests/fixtures/plugins/rejected-manifests.json", import.meta.url), "utf8"));
+  for (const { why, manifest } of cases) {
+    const read = readManifest(JSON.stringify(manifest));
+    const found = read.manifest ? appProblems(read.manifest, useBrowser.getState().settings, "99.0.0") : read.problems;
+    assert.ok(found.length > 0, why);
+  }
 });
