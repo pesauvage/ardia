@@ -44,7 +44,7 @@ and the `ardia` command's plugin commands still install and list files there.
     "rows": [
       { "key": "greeting", "title": "Greeting", "type": "text", "default": "Hello" },
       { "key": "loud", "title": "Shout", "type": "toggle", "default": false },
-      { "key": "mood", "title": "Mood", "type": "choice", "default": "calm", "choices": [{ "value": "calm", "title": "Calm" }, { "value": "busy", "title": "Busy" }] }
+      { "key": "side", "title": "Open Beside On", "type": "choice", "default": "right", "choices": [{ "value": "left", "title": "Left" }, { "value": "right", "title": "Right" }] }
     ]
   },
   "commands": [

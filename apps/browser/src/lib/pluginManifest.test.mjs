@@ -151,3 +151,9 @@ test("every manifest in the shared rejected list is refused, the same list ardia
     assert.ok(found.length > 0, why);
   }
 });
+
+test("the manifest example in docs/plugins.md reads without problems", () => {
+  const doc = readFileSync(new URL("../../../../docs/plugins.md", import.meta.url), "utf8");
+  const start = doc.indexOf("```json") + "```json".length;
+  assert.deepEqual(readManifest(doc.slice(start, doc.indexOf("```", start))).problems, []);
+});
