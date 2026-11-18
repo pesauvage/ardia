@@ -315,7 +315,9 @@ the installed app's); `enable`, `disable` and `call` need Ardia running with CLI
   after checking it against `plugin.schema.json`. `--force` replaces one already there. The plugin arrives off. The
   copy is published with a rename that never replaces anything (`renamex_np` with `RENAME_EXCL` on macOS,
   `renameat2` with `RENAME_NOREPLACE` on Linux), so an install that appears meanwhile is never overwritten without
-  `--force`; a forced replace moves the old folder aside first and puts it back if publishing fails.
+  `--force`. A forced replace swaps the new folder and the old one in a single step (`renamex_np` with `RENAME_SWAP`,
+  `renameat2` with `RENAME_EXCHANGE`); where that isn't available it moves the old folder aside, and puts it back if
+  publishing fails, or, when even that is blocked, keeps it and prints where.
 - `ardia plugins check [NAME|PATH]`: checks manifests.
 
 `check` and `install` hold a manifest to what the app accepts, using the `plugin.schema.json` Ardia wrote for that data

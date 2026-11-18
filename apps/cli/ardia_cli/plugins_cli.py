@@ -308,7 +308,31 @@ def copy_tree(source: Path, target: Path) -> None:
 
 RENAME_EXCL = 0x4
 RENAME_NOREPLACE = 0x1
+RENAME_SWAP = 0x2
+RENAME_EXCHANGE = 0x2
 AT_FDCWD = -100
+
+
+class KeptAside(OSError):
+    pass
+
+
+def rename_exchange(first: Path, second: Path) -> None:
+    if os.name == "nt":
+        raise NotImplementedError
+    libc = ctypes.CDLL(None, use_errno=True)
+    a, b = os.fsencode(first), os.fsencode(second)
+    if sys.platform == "darwin":
+        result = libc.renamex_np(a, b, RENAME_SWAP)
+    elif hasattr(libc, "renameat2"):
+        result = libc.renameat2(AT_FDCWD, a, AT_FDCWD, b, RENAME_EXCHANGE)
+    else:
+        raise NotImplementedError
+    if result != 0:
+        code = ctypes.get_errno()
+        if code in (errno.ENOTSUP, errno.EINVAL, errno.ENOSYS):
+            raise NotImplementedError
+        raise OSError(code, os.strerror(code), str(second))
 
 
 def rename_no_replace(source: Path, target: Path) -> None:
@@ -331,20 +355,35 @@ def rename_no_replace(source: Path, target: Path) -> None:
 
 
 def publish(staged: Path, target: Path, aside: Path, force: bool) -> bool:
-    replaced = False
-    if force:
+    if force and (target.exists() or target.is_symlink()):
         try:
-            os.rename(target, aside)
-            replaced = True
-        except FileNotFoundError:
+            rename_exchange(staged, target)
+            return True
+        except NotImplementedError:
             pass
+        except FileNotFoundError:
+            rename_no_replace(staged, target)
+            return False
+        return replace_through_aside(staged, target, aside)
+    rename_no_replace(staged, target)
+    return False
+
+
+def replace_through_aside(staged: Path, target: Path, aside: Path) -> bool:
+    try:
+        os.rename(target, aside)
+    except FileNotFoundError:
+        rename_no_replace(staged, target)
+        return False
     try:
         rename_no_replace(staged, target)
-    except BaseException:
-        if replaced:
-            os.rename(aside, target)
+    except BaseException as error:
+        try:
+            rename_no_replace(aside, target)
+        except BaseException:
+            raise KeptAside(f"{error}; the plugin that was installed before couldn't be put back and is kept in {aside}") from error
         raise
-    return replaced
+    return True
 
 
 def cmd_install(args) -> int:
@@ -385,18 +424,18 @@ def cmd_install(args) -> int:
             except (Unreachable, MethodError):
                 pass
         replacing = publish(staged, target, staging / "previous", args.force)
+    except KeptAside as error:
+        complain(f"ardia plugins install: {error}")
+        return 1
     except FileExistsError:
+        shutil.rmtree(staging, ignore_errors=True)
         complain(f"ardia plugins install: {name} is already installed (--force replaces it)")
         return 1
     except (config_files.ConfigError, OSError) as error:
+        shutil.rmtree(staging, ignore_errors=True)
         complain(f"ardia plugins install: {error}")
         return 1
-    finally:
-        aside = staging / "previous"
-        if (aside.exists() or aside.is_symlink()) and not (target.exists() or target.is_symlink()):
-            complain(f"ardia plugins install: the {name} that was installed before is in {aside}")
-        else:
-            shutil.rmtree(staging, ignore_errors=True)
+    shutil.rmtree(staging, ignore_errors=True)
     state = "Replaced" if replacing else "Installed"
     say(f"{state} {name} in {target}. It's off: turn it on in Ardia's Settings › Plugins, or with ardia plugins enable {name}.")
     return 0

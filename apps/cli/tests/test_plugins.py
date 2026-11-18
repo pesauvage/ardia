@@ -122,7 +122,16 @@ class PluginsCliTest(unittest.TestCase):
         self.assertEqual(self.ardia("install", str(EXAMPLE))[0], 0)
         target = self.data / "config" / "plugins" / "example"
         before = (target / "plugin.json").read_text()
-        with mock.patch.object(plugins_cli, "rename_no_replace", side_effect=OSError("disk full")):
+        real = plugins_cli.rename_no_replace
+        calls = []
+
+        def fails_once(src, dst):
+            calls.append(src)
+            if len(calls) == 1:
+                raise OSError("disk full")
+            real(src, dst)
+
+        with mock.patch.object(plugins_cli, "rename_exchange", side_effect=NotImplementedError), mock.patch.object(plugins_cli, "rename_no_replace", side_effect=fails_once):
             status, _, _ = self.ardia("install", str(EXAMPLE), "--force")
         self.assertEqual(status, 1)
         self.assertEqual((target / "plugin.json").read_text(), before, "the old install is still there")
@@ -173,6 +182,32 @@ class PluginsCliTest(unittest.TestCase):
             status, out, err = self.ardia("check", str(folder) + "/")
             self.assertEqual(status, 1, out + err)
             self.assertNotIn("Traceback", err)
+
+    def test_a_forced_replace_keeps_the_old_install_when_something_blocks_putting_it_back(self):
+        self.assertEqual(self.ardia("install", str(EXAMPLE))[0], 0)
+        target = self.data / "config" / "plugins" / "example"
+        before = (target / "plugin.json").read_text()
+
+        def another_folder_lands(staged, dst):
+            dst.mkdir()
+            (dst / "plugin.json").write_text('{"name": "example", "title": "Theirs"}')
+            raise FileExistsError(dst)
+
+        with mock.patch.object(plugins_cli, "rename_exchange", side_effect=NotImplementedError), mock.patch.object(plugins_cli, "rename_no_replace", side_effect=another_folder_lands):
+            status, _, err = self.ardia("install", str(EXAMPLE), "--force")
+        self.assertEqual(status, 1)
+        kept = [p for p in target.parent.glob(".example.*/previous/plugin.json")]
+        self.assertEqual([p.read_text() for p in kept], [before], f"the old install is kept beside it: {err}")
+
+    def test_a_forced_replace_swaps_the_folders_in_one_step(self):
+        self.assertEqual(self.ardia("install", str(EXAMPLE))[0], 0)
+        target = self.data / "config" / "plugins" / "example"
+        (target / "old-marker").write_text("old")
+        with mock.patch.object(plugins_cli, "rename_no_replace", side_effect=AssertionError("no gap: the target is never empty")):
+            status, _, err = self.ardia("install", str(EXAMPLE), "--force")
+        self.assertEqual(status, 0, err)
+        self.assertFalse((target / "old-marker").exists())
+        self.assertEqual(sorted(p.name for p in target.parent.iterdir()), ["example"])
 
     def test_list_and_remove_work_from_the_files_when_ardia_is_away(self):
         self.ardia("install", str(EXAMPLE))
