@@ -20,7 +20,7 @@ export type PluginRecord = {
   enabled: boolean;
   approved: string | null;
   values: Record<string, string | boolean>;
-  applied: Record<string, { value: unknown; previous: unknown; order: number }>;
+  applied: Record<string, { value: unknown; previous: unknown; order: number; over: string | null }>;
 };
 
 export type PluginsStore = {

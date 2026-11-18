@@ -595,3 +595,23 @@ test("a plugin named like an Object property gets its own record", async () => {
   assert.ok(lifecycle.requestPluginConsent("constructor") && lifecycle.enablePlugin("constructor", P().consent.hash));
   lifecycle.disablePlugin("constructor");
 });
+
+test("a value you chose between two plugins comes back when both leave, in either order", async () => {
+  S().hydrate({});
+  for (const name of Object.keys(P().records)) lifecycle.disablePlugin(name);
+  const make = (name, limit) => {
+    const doc = JSON.parse(FIXTURE);
+    doc.name = name;
+    doc.settings.defaults = { commandBarStart: { openTabs: { limit } } };
+    return { name, status: "ok", text: JSON.stringify(doc) };
+  };
+  host.folders = [make("first", 2), make("second", 3)];
+  await lifecycle.rescanPlugins();
+  assert.ok(lifecycle.requestPluginConsent("first") && lifecycle.enablePlugin("first", P().consent.hash));
+  S().updateSettings({ commandBarStart: { openTabs: { limit: 7 } } });
+  assert.ok(lifecycle.requestPluginConsent("second") && lifecycle.enablePlugin("second", P().consent.hash));
+  lifecycle.disablePlugin("first");
+  assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 3 } });
+  lifecycle.disablePlugin("second");
+  assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 7 } }, "your own value, not the one from before the first plugin");
+});

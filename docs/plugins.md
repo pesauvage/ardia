@@ -193,8 +193,9 @@ plugin folder's identity on disk (device and inode, after links) in `plugins.jso
   instead, so tests never fill the Trash.
 
 `plugins.json` (version 1): `{ "plugins": { "<name>": { "enabled", "approved" (manifest hash), "values" (row values),
-"applied" ({ key: { value, previous, order } }) } } }`: `order` counts up as plugins are turned on, so whichever
-leaves, the defaults unwind in the order they were applied. Turning a plugin on or off saves `plugins.json` first and changes
+"applied" ({ key: { value, previous, order, over } }) } } }`: `order` counts up as plugins are turned on, and
+`over` names the plugin whose value `previous` was (null when it was yours), so whichever leaves, the defaults unwind
+in the order they were applied and a value you set in between comes back. Turning a plugin on or off saves `plugins.json` first and changes
 settings only once it is saved, so a failed save changes nothing.
 
 ## The helper

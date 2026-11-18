@@ -18,13 +18,13 @@ export function keysConfigSets(): ReadonlySet<string> {
 }
 
 type Step = PluginRecord["applied"][string];
-export type Claims = ReadonlyMap<string, Step>;
+export type Claims = ReadonlyMap<string, Step & { owner: string }>;
 
 export function claimsOf(records: Record<string, PluginRecord>, except: string): Claims {
-  const claims = new Map<string, Step>();
+  const claims = new Map<string, Step & { owner: string }>();
   for (const [name, record] of Object.entries(records)) {
     if (name === except || !record.enabled) continue;
-    for (const [key, step] of Object.entries(record.applied)) if (step.order >= (claims.get(key)?.order ?? -1)) claims.set(key, step);
+    for (const [key, step] of Object.entries(record.applied)) if (step.order >= (claims.get(key)?.order ?? -1)) claims.set(key, { ...step, owner: name });
   }
   return claims;
 }
@@ -43,9 +43,10 @@ export function planDefaults(m: PluginManifest, settings: Settings, fileKeys: Re
     if (fileKeys.has(key)) continue;
     const previous = settings[key as keyof Settings];
     const same = sameValue(previous, value);
-    if (same && !claims.has(key)) continue;
+    const claim = claims.get(key);
+    if (same && !claim) continue;
     if (!same) patch[key] = value;
-    applied[key] = { value, previous, order };
+    applied[key] = { value, previous, order, over: claim && sameValue(previous, claim.value) ? claim.owner : null };
   }
   return { patch: patch as Partial<Settings>, applied };
 }
@@ -64,15 +65,11 @@ export function spliceApplied(records: Record<string, PluginRecord>, leaving: st
   const gone = records[leaving]?.applied ?? {};
   const out = { ...records };
   for (const [key, step] of Object.entries(gone)) {
-    let above: string | null = null;
     for (const [name, record] of Object.entries(out)) {
       const mine = record.applied[key];
-      if (name === leaving || !record.enabled || !mine || mine.order <= step.order) continue;
-      if (above === null || mine.order < out[above]!.applied[key]!.order) above = name;
+      if (name === leaving || !record.enabled || mine?.over !== leaving) continue;
+      out[name] = { ...record, applied: { ...record.applied, [key]: { ...mine, previous: step.previous, over: step.over } } };
     }
-    if (above === null) continue;
-    const record = out[above]!;
-    out[above] = { ...record, applied: { ...record.applied, [key]: { ...record.applied[key]!, previous: step.previous } } };
   }
   return out;
 }
