@@ -6,6 +6,7 @@ export type PluginListing = {
   manifest: PluginManifest | null;
   problems: string[];
   hash: string | null;
+  folderId: string;
 };
 
 export type ProcessState =

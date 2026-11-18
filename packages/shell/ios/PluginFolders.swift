@@ -24,11 +24,13 @@ struct PluginFolders {
     namePattern.firstMatch(in: name, range: NSRange(name.startIndex..., in: name)) != nil
   }
 
-  func pluginFolder(_ name: String) -> String? {
-    guard Self.isName(name), let real = PluginSandbox.resolved((pluginsLexical as NSString).appendingPathComponent(name)) else { return nil }
-    var isDirectory: ObjCBool = false
-    guard FileManager.default.fileExists(atPath: real, isDirectory: &isDirectory), isDirectory.boolValue else { return nil }
-    return real
+  func lexicalFolder(_ name: String) -> String? {
+    Self.isName(name) ? (pluginsLexical as NSString).appendingPathComponent(name) : nil
+  }
+
+  func approvedFolder(_ name: String, folderId: String, approved: String) -> Result<OpenedFolder, FolderRefusal> {
+    guard let path = lexicalFolder(name) else { return .failure(FolderRefusal(reason: "it has no folder")) }
+    return PluginFiles.approvedFolder(path, folderId: folderId, approved: approved)
   }
 
   func dataRoot() -> String { (appData as NSString).appendingPathComponent("PluginData") }
@@ -52,13 +54,11 @@ struct PluginFolders {
   func list() -> [[String: Any]] {
     guard let names = try? FileManager.default.contentsOfDirectory(atPath: pluginsLexical) else { return [] }
     return names.filter(Self.isName).sorted().prefix(Self.maxPlugins).map { name in
-      let manifest = ((pluginsLexical as NSString).appendingPathComponent(name) as NSString).appendingPathComponent(Self.manifestName)
-      var entry = ConfigFolder.readRegularFile(manifest)
-      entry["name"] = name
-      var info = stat()
-      if let real = PluginSandbox.resolved((pluginsLexical as NSString).appendingPathComponent(name)), stat(real, &info) == 0 {
-        entry["folderId"] = "\(info.st_dev):\(info.st_ino)"
-      }
+      guard let folder = PluginFiles.openFolder((pluginsLexical as NSString).appendingPathComponent(name)) else { return ["name": name, "status": "missing"] }
+      defer { folder.close() }
+      let read = PluginFiles.readManifest(in: folder)
+      var entry: [String: Any] = ["name": name, "status": read.status, "folderId": folder.id]
+      if case .text(let text) = read { entry["text"] = text }
       return entry
     }
   }

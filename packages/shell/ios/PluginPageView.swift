@@ -13,6 +13,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   var plugin = "" { didSet { if plugin != oldValue { rebuild() } } }
   var url = "" { didSet { if url != oldValue { load() } } }
   var network = false { didSet { if network != oldValue { rebuild() } } }
+  var folderId = "" { didSet { if folderId != oldValue { rebuild() } } }
 
   static let offlinePolicy =
     "default-src 'self' ardia-plugin: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src 'self' ardia-plugin: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; form-action 'self'; worker-src 'none'"
@@ -44,7 +45,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     guard PluginFolders.isName(plugin) else { return }
     let configuration = WKWebViewConfiguration()
     configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: Self.storeIdentifier(plugin))
-    configuration.setURLSchemeHandler(PluginSchemeHandler(plugin: plugin, policy: network ? nil : Self.offlinePolicy), forURLScheme: PluginSchemeHandler.scheme)
+    configuration.setURLSchemeHandler(PluginSchemeHandler(plugin: plugin, folderId: folderId, policy: network ? nil : Self.offlinePolicy), forURLScheme: PluginSchemeHandler.scheme)
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
     configuration.mediaTypesRequiringUserActionForPlayback = .all
     let view = WKWebView(frame: bounds, configuration: configuration)

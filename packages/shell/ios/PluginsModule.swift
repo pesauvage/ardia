@@ -44,6 +44,7 @@ public class PluginsModule: Module {
       Prop("plugin") { (view: PluginPageView, value: String) in view.plugin = value }
       Prop("url") { (view: PluginPageView, value: String) in view.url = value }
       Prop("network") { (view: PluginPageView, value: Bool) in view.network = value }
+      Prop("folderId") { (view: PluginPageView, value: String) in view.folderId = value }
     }
 
     OnDestroy {
@@ -63,11 +64,13 @@ public class PluginsModule: Module {
     let name = spec["name"] as? String ?? ""
     let run = spec["run"] as? [String] ?? []
     let memoryMB = spec["memoryMB"] as? Int ?? 0
-    guard PluginFolders.isName(name), !run.isEmpty, memoryMB > 0, let network = spec["network"] as? Bool else {
-      promise.reject("ERR_BAD_ARGS", "start needs name, run, memoryMB and network")
+    guard PluginFolders.isName(name), !run.isEmpty, memoryMB > 0, let network = spec["network"] as? Bool, let folderId = spec["folderId"] as? String,
+      let approved = spec["approved"] as? String
+    else {
+      promise.reject("ERR_BAD_ARGS", "start needs name, run, memoryMB, network, folderId and approved")
       return
     }
-    let process = PluginProcess.Spec(name: name, run: run, memoryMB: memoryMB, network: network)
+    let process = PluginProcess.Spec(name: name, run: run, memoryMB: memoryMB, network: network, folderId: folderId, approved: approved)
     PluginHost.shared.start(process) { reply in promise.resolve(reply) }
   }
 

@@ -174,6 +174,11 @@ plugin folder's identity on disk (device and inode, after links) in `plugins.jso
   for the manifest's declarations, not for the code. A folder replaced on disk (`ardia plugins install --force` always
   installs a new folder, then swaps it in) is a new folder, so the plugin needs a new approval even with the same
   manifest and even when Ardia wasn't running; a running Ardia is also asked to turn it off first.
+- Ardia reads the manifest and the folder's identity through one opened folder, never two lookups by name. Each
+  helper start opens the folder again, checks that it is the approved one and that its `plugin.json` still hashes to
+  the approval, and starts the helper in that opened folder; the page's files are served from the approved folder
+  only. A folder swapped in between a scan and a start or a page load gets "changed since you approved it", not the
+  old approval.
 - `ardia plugins enable NAME` opens the same sheet in Ardia; it never turns a plugin on by itself.
   Nothing else turns one on: the dev harness can reach the plugin store only in a Debug build, never in a Release
   build that starts it for the perf probe.

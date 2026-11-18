@@ -19,5 +19,6 @@ export function usePluginPageContext(tabId: string) {
   return pageContextOf(tabId);
 }
 export const usePluginPageUrl = (name: string, context: Parameters<typeof pageViewUrl>[2], path: string) => usePlugins((s) => pageViewUrl(s, name, context, path));
+export const usePluginFolderId = (name: string) => usePlugins((s) => s.listings[name]?.folderId ?? "");
 export const usePluginNetwork = (name: string) => usePlugins((s) => !!activeManifest(s, name)?.permissions.includes("network"));
 export const usePluginPageSpec = (name: string) => usePlugins((s) => s.listings[name]?.manifest?.page ?? null);

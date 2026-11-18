@@ -8,7 +8,7 @@ export const CRASH_WINDOW_MS = 10 * 60_000;
 export const CRASH_LIMIT = 5;
 export const STOP_GRACE_MS = 3000;
 
-type Supervised = { hash: string; manifest: PluginManifest; failures: number[]; timer: ReturnType<typeof setTimeout> | null; token: number };
+type Supervised = { hash: string; folderId: string; manifest: PluginManifest; failures: number[]; timer: ReturnType<typeof setTimeout> | null; token: number };
 
 const supervised = new Map<string, Supervised>();
 const stopping = new Map<string, Promise<void>>();
@@ -47,7 +47,7 @@ async function launch(name: string, entry: Supervised) {
   const m = entry.manifest;
   let started: Awaited<ReturnType<typeof startPluginProcess>>;
   try {
-    started = await startPluginProcess({ name, run: m.process!.run, memoryMB: m.process!.memoryMB, network: m.permissions.includes("network") });
+    started = await startPluginProcess({ name, run: m.process!.run, memoryMB: m.process!.memoryMB, network: m.permissions.includes("network"), folderId: entry.folderId, approved: entry.hash });
   } catch (error) {
     started = { ok: false, reason: String(error) };
   }
@@ -61,11 +61,11 @@ async function launch(name: string, entry: Supervised) {
   setProcess(name, { state: "running", run: started.run, since: Date.now() });
 }
 
-export function superviseProcess(name: string, hash: string, manifest: PluginManifest) {
+export function superviseProcess(name: string, hash: string, manifest: PluginManifest, folderId: string) {
   const current = supervised.get(name);
   if (current && current.hash === hash) return;
   if (current) stopProcess(name);
-  const entry: Supervised = { hash, manifest, failures: [], timer: null, token: ++tokens };
+  const entry: Supervised = { hash, folderId, manifest, failures: [], timer: null, token: ++tokens };
   supervised.set(name, entry);
   void launch(name, entry);
 }

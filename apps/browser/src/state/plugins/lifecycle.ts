@@ -50,7 +50,7 @@ export function reconcilePlugins() {
     const manifest = activeManifest(s, name);
     if (!manifest) continue;
     active.add(name);
-    if (manifest.process) superviseProcess(name, s.listings[name]!.hash!, manifest);
+    if (manifest.process) superviseProcess(name, s.listings[name]!.hash!, manifest, s.listings[name]!.folderId);
     else stopProcess(name);
   }
   for (const name of supervisedNames()) if (!active.has(name)) stopProcess(name);

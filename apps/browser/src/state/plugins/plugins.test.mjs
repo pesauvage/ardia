@@ -79,7 +79,7 @@ test("an installed plugin stays off until its consent is accepted, then starts i
   assert.equal(lifecycle.enablePlugin("example", "0".repeat(64)), false, "a stale hash never turns it on");
   const run = await enabled();
   assert.ok(run > 0);
-  assert.deepEqual(host.starts.at(-1), { name: "example", run: ["/usr/bin/python3", "helper.py"], memoryMB: 256, network: false });
+  assert.deepEqual(host.starts.at(-1), { name: "example", run: ["/usr/bin/python3", "helper.py"], memoryMB: 256, network: false, folderId: "", approved: P().records.example.approved });
   assert.equal(P().processes.example.state, "running");
   const counts = takePluginCounts();
   assert.equal(counts.plugin_enables, 1);
@@ -359,7 +359,11 @@ test("a served page keeps its server's fragment when it gets a path or a context
 });
 
 test("a plugin folder replaced on disk needs a new approval, even with the same plugin.json", async () => {
-  await enabled();
+  host.folders = [{ name: "example", status: "ok", text: FIXTURE, folderId: "1:100" }];
+  await lifecycle.rescanPlugins();
+  assert.ok(lifecycle.requestPluginConsent("example") && lifecycle.enablePlugin("example", P().consent.hash));
+  await settle();
+  assert.deepEqual([host.starts.at(-1).folderId, host.starts.at(-1).approved], ["1:100", P().records.example.approved], "the helper starts bound to the folder and manifest you approved");
   host.folders = [{ name: "example", status: "ok", text: FIXTURE, folderId: "1:200" }];
   await lifecycle.rescanPlugins();
   assert.ok(needsReview(P(), "example"), "a new folder identity is a change");

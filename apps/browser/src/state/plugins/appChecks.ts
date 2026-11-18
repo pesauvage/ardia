@@ -37,11 +37,11 @@ export function appProblems(m: PluginManifest, settings: Settings, appVersion: s
 }
 
 export function listingOf(name: string, text: string | null, readProblem: string | null, settings: Settings, appVersion: string, folderId = ""): PluginListing {
-  if (text === null) return { name, manifest: null, problems: [readProblem ?? "plugin.json couldn't be read"], hash: null };
+  if (text === null) return { name, manifest: null, problems: [readProblem ?? "plugin.json couldn't be read"], hash: null, folderId };
   const hash = manifestHash(text, folderId);
   const read = readManifest(text);
-  if (!read.manifest) return { name, manifest: null, problems: read.problems, hash };
+  if (!read.manifest) return { name, manifest: null, problems: read.problems, hash, folderId };
   const problems = appProblems(read.manifest, settings, appVersion);
   if (read.manifest.name !== name) problems.push(`plugin.json: name is ${read.manifest.name}, but its folder is ${name}`);
-  return problems.length ? { name, manifest: null, problems, hash } : { name, manifest: read.manifest, problems: [], hash };
+  return problems.length ? { name, manifest: null, problems, hash, folderId } : { name, manifest: read.manifest, problems: [], hash, folderId };
 }

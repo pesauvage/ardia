@@ -24,6 +24,8 @@ final class PluginProcess {
     let run: [String]
     let memoryMB: Int
     let network: Bool
+    let folderId: String
+    let approved: String
   }
 
   enum Failure: Error {
@@ -62,7 +64,13 @@ final class PluginProcess {
     _ spec: Spec, run: Int, folders: PluginFolders, queue: DispatchQueue,
     onLine: @escaping (PluginProcess, String) -> Void, onExit: @escaping (PluginProcess, Int32?, Int32?, Bool) -> Void
   ) -> Result<PluginProcess, Failure> {
-    guard let pluginFolder = folders.pluginFolder(spec.name) else { return .failure(.refused("its folder is missing")) }
+    let folder: OpenedFolder
+    switch folders.approvedFolder(spec.name, folderId: spec.folderId, approved: spec.approved) {
+    case .success(let opened): folder = opened
+    case .failure(let refusal): return .failure(.refused(refusal.reason))
+    }
+    defer { folder.close() }
+    let pluginFolder = folder.path
     guard let data = folders.dataFolder(spec.name) else { return .failure(.refused("its data folder couldn't be made")) }
     guard let first = spec.run.first, let program = PluginSandbox.program(first, pluginFolder: pluginFolder) else {
       return .failure(.refused("\(spec.run.first ?? "") wasn't found"))
@@ -102,7 +110,7 @@ final class PluginProcess {
     posix_spawn_file_actions_adddup2(&actions, log, 1)
     posix_spawn_file_actions_adddup2(&actions, log, 2)
     posix_spawn_file_actions_adddup2(&actions, pair[1], channelFd)
-    posix_spawn_file_actions_addchdir_np(&actions, pluginFolder)
+    posix_spawn_file_actions_addfchdir_np(&actions, folder.fd)
     var none = sigset_t()
     var all = sigset_t()
     sigemptyset(&none)
