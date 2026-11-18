@@ -10,7 +10,7 @@ const { pluginBarActions, runPluginAction } = await import("./commands.ts");
 const { pageContextOf, pageViewUrl, openPluginPage } = await import("./pages.ts");
 const { barActions } = await import("../omnibox/barActions.ts");
 const { isInternalTab } = await import("../pages/urls.ts");
-const { processExited, CRASH_LIMIT } = await import("./process.ts");
+const { processExited, restartProcess, CRASH_LIMIT } = await import("./process.ts");
 const { callTool } = await import("./tools.ts");
 const { pluginSocketMethod } = await import("./socketMethods.ts");
 const { takePluginCounts } = await import("../telemetry/pluginCounts.ts");
@@ -485,4 +485,15 @@ test("turning a plugin off never overwrites what config.json now sets, even to t
   } finally {
     stub.configFolder.files.delete("config.json");
   }
+});
+
+test("two quick restarts start the helper once", async () => {
+  await enabled();
+  const starts = host.starts.length;
+  restartProcess("example");
+  restartProcess("example");
+  await settle();
+  assert.equal(host.starts.length - starts, 1, "one new helper");
+  assert.equal(P().processes.example.state, "running");
+  lifecycle.disablePlugin("example");
 });

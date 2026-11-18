@@ -85,10 +85,10 @@ export function restartProcess(name: string) {
   if (entry.timer) clearTimeout(entry.timer);
   entry.timer = null;
   entry.failures = [];
-  entry.token = ++tokens;
+  const token = (entry.token = ++tokens);
   stopped(name);
   void stopPluginProcess(name, 0, STOP_GRACE_MS).then(() => {
-    if (supervised.get(name) === entry) void launch(name, entry);
+    if (supervised.get(name) === entry && entry.token === token) void launch(name, entry);
   });
 }
 
