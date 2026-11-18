@@ -68,12 +68,12 @@ public class PluginsModule: Module {
     let run = spec["run"] as? [String] ?? []
     let memoryMB = spec["memoryMB"] as? Int ?? 0
     guard PluginFolders.isName(name), !run.isEmpty, memoryMB > 0, let network = spec["network"] as? Bool, let folderId = spec["folderId"] as? String,
-      let approved = spec["approved"] as? String
+      let approved = spec["approved"] as? String, let hasPage = spec["page"] as? Bool
     else {
-      promise.reject("ERR_BAD_ARGS", "start needs name, run, memoryMB, network, folderId and approved")
+      promise.reject("ERR_BAD_ARGS", "start needs name, run, memoryMB, network, folderId, approved and page")
       return
     }
-    let process = PluginProcess.Spec(name: name, run: run, memoryMB: memoryMB, network: network, folderId: folderId, approved: approved)
+    let process = PluginProcess.Spec(name: name, run: run, memoryMB: memoryMB, network: network, folderId: folderId, approved: approved, hasPage: hasPage)
     PluginHost.shared.start(process) { reply in promise.resolve(reply) }
   }
 

@@ -34,3 +34,22 @@ final class PluginPageMessagesTests: XCTestCase {
     XCTAssertTrue(limit.allow(now: 11.01))
   }
 }
+
+final class PluginPageAnswerTests: XCTestCase {
+  func decode(_ line: Data?) -> [String: Any] {
+    line.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+  }
+
+  func testPagePostIsAnsweredTheSameHoweverItIsSpelledAndRefusedWithoutAPage() {
+    let escaped = "{\"id\":1,\"method\":\"page\\u002epost\",\"params\":{\"message\":1}}"
+    let refused = decode(PluginPageMessages.answer(escaped, hasPage: false) { _ in XCTFail("never posted"); return nil })
+    XCTAssertEqual((refused["error"] as? [String: Any])?["code"] as? String, "refused")
+    var posted: PagePost?
+    let ok = decode(PluginPageMessages.answer(escaped, hasPage: true) { posted = $0; return nil })
+    XCTAssertEqual(ok["result"] as? [String: Bool], ["ok": true])
+    XCTAssertEqual(posted?.json, "1")
+    let full = decode(PluginPageMessages.answer(escaped, hasPage: true) { _ in "overloaded" })
+    XCTAssertEqual((full["error"] as? [String: Any])?["code"] as? String, "overloaded")
+    XCTAssertNil(PluginPageMessages.answer("{\"id\":2,\"method\":\"windows\"}", hasPage: true) { _ in nil }, "other methods go on to Ardia")
+  }
+}

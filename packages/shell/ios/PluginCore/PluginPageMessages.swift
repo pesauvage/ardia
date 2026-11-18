@@ -36,6 +36,27 @@ enum PluginPageMessages {
     return .success(PagePost(view: params["view"] as? String, json: json))
   }
 
+  static func answer(_ line: String, hasPage: Bool, post: (PagePost) -> String?) -> Data? {
+    guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any], object["method"] as? String == "page.post" else { return nil }
+    var reply: [String: Any]
+    if !hasPage {
+      reply = ["error": ["code": "refused", "message": "This plugin has no page."]]
+    } else {
+      switch toPage(object["params"] as? [String: Any] ?? [:]) {
+      case .success(let message):
+        if let code = post(message) {
+          reply = ["error": ["code": code, "message": "The page has too many messages waiting; send more once it has caught up."]]
+        } else {
+          reply = ["result": ["ok": true]]
+        }
+      case .failure(let refusal):
+        reply = ["error": ["code": "bad_request", "message": refusal.reason]]
+      }
+    }
+    if let id = object["id"] { reply["id"] = id }
+    return self.line(reply)
+  }
+
   final class Limit {
     private var windowStart: TimeInterval = -.infinity
     private var count = 0

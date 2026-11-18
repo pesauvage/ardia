@@ -283,7 +283,7 @@ Requests from the helper (`{"id", "method", "params"}`):
 | `windows` | `tabs` | as on the socket |
 | `run` `{"command", "arg"?, "window"?, "tab"?}` | `commands` | as on the socket |
 | `open` `{"urls", "activate"?}` | `commands` | opens the URLs as background tabs, as the socket's `apply` `open` op does (`activate` shows the first) |
-| `page.post` `{"message", "view"?}` | a `page` | `{"ok": true}`: a message to the plugin's page views ([Pages and their helper](#pages-and-their-helper)) |
+| `page.post` `{"message", "view"?}` | a `page` | `{"ok": true}`, or `overloaded`: a message to the plugin's page views ([Pages and their helper](#pages-and-their-helper)); `refused` for a plugin with no page, however the method name is spelled in JSON |
 | `page.open` `{"path"?, "split"?, "side"?, "context"?}` | a `page`; `context` needs `tabs` | `{"tabId", "windowId"}`: opens the plugin's page at that path in the last focused window, as a tab or in Split View beside the current tab |
 | `tools.call` `{"plugin", "tool", "input"?}` | every permission the other plugin has | the tool's result, or its error; the plugin must be on and running. A plugin can't reach through another plugin's tools to what it wasn't granted itself |
 | `result` `{"call", "result"? , "error"?}` | | `{"ok": true}`: the answer to a call (below) |

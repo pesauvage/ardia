@@ -421,7 +421,7 @@ const systemSignalsModule: Modules["ArdiaSystemSignals"] = {
 
 export const pluginHost = {
   folders: [] as { name: string; status: "ok" | "missing" | "link" | "notFile" | "tooBig" | "unreadable"; text?: string; folderId?: string }[],
-  starts: [] as { name: string; run: string[]; memoryMB: number; network: boolean; folderId: string; approved: string }[],
+  starts: [] as { name: string; run: string[]; memoryMB: number; network: boolean; folderId: string; approved: string; page: boolean }[],
   stops: [] as { name: string; run: number; graceMs: number }[],
   replies: [] as { name: string; run: number; line: string }[],
   events: [] as { name: string; run: number; line: string }[],

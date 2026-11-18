@@ -79,7 +79,7 @@ test("an installed plugin stays off until its consent is accepted, then starts i
   assert.equal(lifecycle.enablePlugin("example", "0".repeat(64)), false, "a stale hash never turns it on");
   const run = await enabled();
   assert.ok(run > 0);
-  assert.deepEqual(host.starts.at(-1), { name: "example", run: ["/usr/bin/python3", "helper.py"], memoryMB: 256, network: false, folderId: "", approved: P().records.example.approved });
+  assert.deepEqual(host.starts.at(-1), { name: "example", run: ["/usr/bin/python3", "helper.py"], memoryMB: 256, network: false, folderId: "", approved: P().records.example.approved, page: true });
   assert.equal(P().processes.example.state, "running");
   const counts = takePluginCounts();
   assert.equal(counts.plugin_enables, 1);

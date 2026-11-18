@@ -20,6 +20,7 @@ final class PluginProcess: PluginRun {
   private var reaped = false
   private var overMemory = false
   let approved: String
+  let hasPage: Bool
   var onPagePost: ((PluginProcess, PagePost) -> String?)?
   private var family: PluginFamily?
   private var log: Int32
@@ -31,6 +32,7 @@ final class PluginProcess: PluginRun {
     let network: Bool
     let folderId: String
     let approved: String
+    let hasPage: Bool
   }
 
   enum Failure: Error {
@@ -42,8 +44,9 @@ final class PluginProcess: PluginRun {
     }
   }
 
-  private init(name: String, run: Int, pid: pid_t, queue: DispatchQueue, memoryLimit: UInt64, log: Int32, approved: String) {
+  private init(name: String, run: Int, pid: pid_t, queue: DispatchQueue, memoryLimit: UInt64, log: Int32, approved: String, hasPage: Bool) {
     self.approved = approved
+    self.hasPage = hasPage
     self.log = log
     self.name = name
     self.run = run
@@ -154,7 +157,7 @@ final class PluginProcess: PluginRun {
       return .failure(.refused("it couldn't start (\(errnoText(result)))"))
     }
     let limit = UInt64(max(64, spec.memoryMB)) << 20
-    let process = PluginProcess(name: spec.name, run: run, pid: pid, queue: queue, memoryLimit: limit, log: log, approved: spec.approved)
+    let process = PluginProcess(name: spec.name, run: run, pid: pid, queue: queue, memoryLimit: limit, log: log, approved: spec.approved, hasPage: spec.hasPage)
     process.watch(channel: pair[0], onLine: onLine, onExit: onExit)
     return .success(process)
   }
@@ -191,24 +194,11 @@ final class PluginProcess: PluginRun {
   }
 
   private func answeredPageLine(_ line: String) -> Bool {
-    guard line.contains("\"page.post\""), let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
-      object["method"] as? String == "page.post"
-    else { return false }
-    var reply: [String: Any]
-    switch PluginPageMessages.toPage(object["params"] as? [String: Any] ?? [:]) {
-    case .success(let post):
-      if let code = onPagePost?(self, post) {
-        reply = ["error": ["code": code, "message": "The page has too many messages waiting; send more once it has caught up."]]
-      } else {
-        reply = ["result": ["ok": true]]
-      }
-    case .failure(let refusal):
-      reply = ["error": ["code": "bad_request", "message": refusal.reason]]
-    }
-    if let id = object["id"] { reply["id"] = id }
-    connection?.reply(PluginPageMessages.line(reply), ticket: 0)
+    guard let reply = PluginPageMessages.answer(line, hasPage: hasPage, post: { [weak self] post in self.flatMap { $0.onPagePost?($0, post) } }) else { return false }
+    connection?.reply(reply, ticket: 0)
     return true
   }
+
 
   private func reapIfGone(_ onExit: @escaping (PluginProcess, Int32?, Int32?, Bool) -> Void) {
     reap(onExit)
