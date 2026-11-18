@@ -182,7 +182,8 @@ plugin folder's identity on disk (device and inode, after links) in `plugins.jso
   instead, so tests never fill the Trash.
 
 `plugins.json` (version 1): `{ "plugins": { "<name>": { "enabled", "approved" (manifest hash), "values" (row values),
-"applied" ({ key: { value, previous } }) } } }`.
+"applied" ({ key: { value, previous, order } }) } } }`: `order` counts up as plugins are turned on, so whichever
+leaves, the defaults unwind in the order they were applied.
 
 ## The helper
 

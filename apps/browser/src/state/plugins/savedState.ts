@@ -18,7 +18,7 @@ function valuesOf(raw: unknown): Record<string, string | boolean> {
 function appliedOf(raw: unknown): PluginRecord["applied"] {
   if (!isFields(raw)) return {};
   const out: PluginRecord["applied"] = {};
-  for (const [key, entry] of Object.entries(raw)) if (isFields(entry) && Object.hasOwn(entry, "value")) out[key] = { value: entry.value, previous: entry.previous };
+  for (const [key, entry] of Object.entries(raw)) if (isFields(entry) && Object.hasOwn(entry, "value")) out[key] = { value: entry.value, previous: entry.previous, order: typeof entry.order === "number" && Number.isSafeInteger(entry.order) ? entry.order : 0 };
   return out;
 }
 

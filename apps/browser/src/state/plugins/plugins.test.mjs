@@ -454,3 +454,23 @@ test("a command named page doesn't collide with the page's own entry", async () 
   assert.ok(host.events.slice(calls).some((e) => JSON.parse(e.line).tool === "hello"), "it calls its tool");
   lifecycle.disablePlugin("example");
 });
+
+test("defaults unwind in the order they were applied, even when a later plugin sets the value from before", async () => {
+  S().hydrate({});
+  for (const name of Object.keys(P().records)) lifecycle.disablePlugin(name);
+  const original = S().settings.commandBarStart;
+  const dark = JSON.parse(FIXTURE);
+  dark.name = "dark";
+  dark.settings.defaults = { commandBarStart: { openTabs: { limit: 2 } } };
+  const light = JSON.parse(FIXTURE);
+  light.name = "light";
+  light.settings.defaults = { commandBarStart: original };
+  host.folders = [{ name: "dark", status: "ok", text: JSON.stringify(dark) }, { name: "light", status: "ok", text: JSON.stringify(light) }];
+  await lifecycle.rescanPlugins();
+  for (const name of ["dark", "light"]) assert.ok(lifecycle.requestPluginConsent(name) && lifecycle.enablePlugin(name, P().consent.hash));
+  assert.deepEqual(S().settings.commandBarStart, original);
+  lifecycle.disablePlugin("light");
+  assert.deepEqual(S().settings.commandBarStart, { openTabs: { limit: 2 } }, "the plugin still on gets its value back");
+  lifecycle.disablePlugin("dark");
+  assert.deepEqual(S().settings.commandBarStart, original, "and once both are off, the value from before either");
+});

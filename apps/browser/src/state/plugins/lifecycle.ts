@@ -111,9 +111,8 @@ export function enablePlugin(name: string, hash: string): boolean {
   const before = recordOf(currentPlugins(), name);
   const values = { ...defaultValues(manifest), ...before.values };
   const kept = before.enabled && before.approved === hash;
-  const claims = claimsOf(currentPlugins().records, name);
-  if (!kept) restoreDefaults(before.applied, claims);
-  const applied = kept ? before.applied : applyDefaults(manifest, claims);
+  if (!kept) restoreDefaults(before.applied, claimsOf(currentPlugins().records, name));
+  const applied = kept ? before.applied : applyDefaults(manifest, currentPlugins().records, name);
   const saved = updateRecord(name, () => ({ enabled: true, approved: hash, values, applied }));
   if (!saved) return false;
   usePlugins.setState({ consent: null });
