@@ -80,6 +80,19 @@ async function toolsCall(name: string, m: PluginManifest, params: Record<string,
   return outcome.ok ? { result: outcome.result } : failure(outcome.code, outcome.message);
 }
 
+export const MAX_OPEN_URLS = 10;
+const WEB_URL = /^https?:\/\/(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*)(:\d{1,5})?(?:[/?#][\x21-\x7e]*)?$/i;
+
+export const isPluginWebUrl = (url: unknown): url is string => typeof url === "string" && url.length <= 2048 && WEB_URL.test(url) && !url.includes("\\");
+
+async function openTabs(c: Connection, m: PluginManifest, params: Record<string, unknown>): Promise<Body> {
+  if (!has(m, "commands")) return failure("refused", "open needs the commands permission.");
+  const { urls, activate } = params;
+  if (!Array.isArray(urls) || urls.length < 1 || urls.length > MAX_OPEN_URLS || !urls.every(isPluginWebUrl))
+    return failure("bad_request", `open takes urls: 1 to ${MAX_OPEN_URLS} http or https addresses, with no credentials, spaces or control characters.`);
+  return applyMethod({ ops: [{ op: "open", urls, ...(activate === true ? { activate: true } : {}) }] }, () => !!activeManifest(currentPlugins(), c.name));
+}
+
 function answer(c: Connection, m: PluginManifest, method: string, params: Record<string, unknown>): Body | Promise<Body> {
   switch (method) {
     case "hello":
@@ -93,8 +106,7 @@ function answer(c: Connection, m: PluginManifest, method: string, params: Record
     case "run":
       return has(m, "commands") ? runMethod(params) : failure("refused", "run needs the commands permission.");
     case "open":
-      if (!has(m, "commands")) return failure("refused", "open needs the commands permission.");
-      return applyMethod({ ops: [{ op: "open", urls: params.urls, ...(params.activate === true ? { activate: true } : {}) }] }, () => !!activeManifest(currentPlugins(), c.name));
+      return openTabs(c, m, params);
     case "page.open":
       return openPage(c.name, m, params);
     case "tools.call":

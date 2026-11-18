@@ -614,3 +614,20 @@ test("a page opens a tab only by asking its helper, which needs the commands per
   lifecycle.disablePlugin("example");
   void w;
 });
+
+test("open takes only http and https URLs, at most ten, refusing everything else before anything opens", async () => {
+  const run = await enabled();
+  S().createWindow({ url: "https://a.example/" });
+  const bad = ["file:///etc/passwd", "/abs/path", "ardia:settings", "ardia://settings", "chrome://history", "about:blank", "javascript:alert(1)", "ardia-plugin://example/page/index.html", "data:text/html,hi", "https://user:pass@b.example/", "https://user@b.example/", " https://b.example/", "https://b.example/\u0000", "https://b.example/\n", "HTTPS:b.example", "https:\\\\b.example", "https://", "ht\ttps://b.example/", "https://b.example/ x", 7];
+  for (const url of bad) {
+    const tabs = Object.keys(S().tabs).length;
+    const reply = await ask("open", { urls: [url] }, run);
+    assert.equal(reply.error?.code, "bad_request", JSON.stringify(url));
+    assert.equal(Object.keys(S().tabs).length, tabs, `nothing opened for ${JSON.stringify(url)}`);
+  }
+  assert.equal((await ask("open", { urls: Array.from({ length: 11 }, (_, i) => `https://b.example/${i}`) }, run)).error?.code, "bad_request", "at most ten a call");
+  const fine = await ask("open", { urls: ["HTTPS://B.example/Mixed?q=1#f", "http://c.example/"] }, run);
+  assert.equal(fine.result?.ok, true, JSON.stringify(fine));
+  lifecycle.disablePlugin("example");
+});
+
