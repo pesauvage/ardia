@@ -38,7 +38,7 @@ final class PluginSchemeHandler: NSObject, WKURLSchemeHandler {
   }
 
   private func respond(_ task: WKURLSchemeTask, _ url: URL, _ status: Int, _ text: String) {
-    let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "text/plain; charset=utf-8"])!
+    let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers(["content-type": "text/plain; charset=utf-8"]))!
     task.didReceive(response)
     task.didReceive(Data(text.utf8))
     task.didFinish()
