@@ -595,3 +595,22 @@ test("removing stops when turning the plugin off can't be saved, and nothing tur
     host.removeGate = null;
   }
 });
+
+test("a page opens a tab only by asking its helper, which needs the commands permission", async () => {
+  const run = await enabled();
+  const w = S().createWindow({ url: "https://a.example/" });
+  const before = Object.keys(S().tabs).length;
+  const opened = await ask("open", { urls: ["https://b.example/from-the-page"] }, run);
+  assert.ok(opened.result, JSON.stringify(opened));
+  assert.ok(Object.values(S().tabs).some((t) => t.url === "https://b.example/from-the-page"));
+  assert.equal(Object.keys(S().tabs).length, before + 1);
+  const bare = JSON.parse(FIXTURE);
+  bare.permissions = ["tabs"];
+  bare.commands = bare.commands.filter((c) => !c.tool || c.tool !== "newtab");
+  await install(JSON.stringify(bare));
+  assert.ok(lifecycle.requestPluginConsent("example") && lifecycle.enablePlugin("example", P().consent.hash));
+  await settle();
+  assert.equal((await ask("open", { urls: ["https://c.example/"] }, P().processes.example.run)).error.code, "refused");
+  lifecycle.disablePlugin("example");
+  void w;
+});

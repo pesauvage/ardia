@@ -9,6 +9,7 @@ import { automationWindows, lastFocusedEligibleWindow } from "../automation/auto
 import { SPLIT_SIDES, type PageSide } from "../../lib/pluginManifest";
 import { isPagePath, openPluginPage } from "./pages";
 import { eventTargets, refreshFeed, runMethod, setFeedConsumer, type Body } from "../automation/controlSocket";
+import { applyMethod } from "../automation/workspaceMethods";
 import { launchToReplay } from "../automation/lifecycleEvents";
 import type { AutomationEventName } from "../automation/eventNames";
 import { activeManifest, currentPlugins, usePlugins } from "./store";
@@ -91,6 +92,9 @@ function answer(c: Connection, m: PluginManifest, method: string, params: Record
       return has(m, "tabs") ? { result: minimizedWindows(has(m, "fullUrls")) } : failure("refused", "windows needs the tabs permission.");
     case "run":
       return has(m, "commands") ? runMethod(params) : failure("refused", "run needs the commands permission.");
+    case "open":
+      if (!has(m, "commands")) return failure("refused", "open needs the commands permission.");
+      return applyMethod({ ops: [{ op: "open", urls: params.urls, ...(params.activate === true ? { activate: true } : {}) }] }, () => !!activeManifest(currentPlugins(), c.name));
     case "page.open":
       return openPage(c.name, m, params);
     case "tools.call":

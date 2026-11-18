@@ -40,7 +40,7 @@ public class PluginsModule: Module {
       .runOnQueue(.main)
 
     View(PluginPageView.self) {
-      Events("onOpenUrl", "onLoaded")
+      Events("onLoaded")
       Prop("plugin") { (view: PluginPageView, value: String) in view.plugin = value }
       Prop("url") { (view: PluginPageView, value: String) in view.url = value }
       Prop("network") { (view: PluginPageView, value: Bool) in view.network = value }

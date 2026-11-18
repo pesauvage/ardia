@@ -282,6 +282,7 @@ Requests from the helper (`{"id", "method", "params"}`):
 | `subscribe` `{"events", "idle"?}` | the events in `hooks` | `{"ok": true}`; then `{"event", "time", "data"}` lines as on the socket; `["*"]` means every event in `hooks` |
 | `windows` | `tabs` | as on the socket |
 | `run` `{"command", "arg"?, "window"?, "tab"?}` | `commands` | as on the socket |
+| `open` `{"urls", "activate"?}` | `commands` | opens the URLs as background tabs, as the socket's `apply` `open` op does (`activate` shows the first) |
 | `page.post` `{"message", "view"?}` | a `page` | `{"ok": true}`: a message to the plugin's page views ([Pages and their helper](#pages-and-their-helper)) |
 | `page.open` `{"path"?, "split"?, "side"?, "context"?}` | a `page`; `context` needs `tabs` | `{"tabId", "windowId"}`: opens the plugin's page at that path in the last focused window, as a tab or in Split View beside the current tab |
 | `tools.call` `{"plugin", "tool", "input"?}` | every permission the other plugin has | the tool's result, or its error; the plugin must be on and running. A plugin can't reach through another plugin's tools to what it wasn't granted itself |
@@ -345,10 +346,20 @@ whichever profile the tab's window shows:
   WebRTC is switched off through a WebKit preference that isn't public API; on a macOS where it's missing, a page
   without `network` isn't shown at all rather than shown with WebRTC on. With `network`, a page is a web page like any
   other.
-- **Stays on its origin.** Its own origin may navigate freely. A link to any other http(s) address that you click
-  opens as a new tab in the window's profile (where your cookies apply, as for any link you open), but only within a
-  second of a click or key press of yours in that page: a link a script clicks, a pop-up or a `window.open` opens
-  nothing. Downloads and every other navigation are cancelled.
+- **Stays on its origin.** Its own files may navigate among themselves. Every other navigation is cancelled: a
+  link, a `window.open`, a pop-up, a form post or a download never leaves the page, and a plugin page never opens a
+  browser tab by itself. To open one, the page asks its helper, and a helper with the `commands` permission (shown on
+  the consent sheet as "Runs Ardia commands, like opening and closing tabs") opens it with `open`:
+
+  ```js
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest("a[href^='http']");
+    if (link) { event.preventDefault(); window.ardia.send({ open: link.href }); }
+  });
+  ```
+
+  and the helper answers `{"pageMessage": {"open": url}}` with `{"method": "open", "params": {"urls": [url]}}`. A
+  plugin without `commands` can't open tabs.
 
 ## The ardia command
 

@@ -3,7 +3,7 @@ import { Box, Button, PluginPageView, Text } from "../ui";
 import { useTheme } from "../ui/theme";
 import { useTab } from "../../state/browser/hooks";
 import { usePluginActive, usePluginFolderId, usePluginNetwork, usePluginPageContext, usePluginApproval, usePluginPageRun, usePluginPageSpec, usePluginPageUrl, usePluginProcess } from "../../state/plugins/hooks";
-import { openPageLink, pluginPagePath } from "../../state/plugins/actions";
+import { pluginPagePath } from "../../state/plugins/actions";
 import { openSettings } from "../../state/settings/settingsWindows";
 
 function Notice({ title, detail, name }: { title: string; detail: string; name: string }) {
@@ -20,7 +20,6 @@ function Notice({ title, detail, name }: { title: string; detail: string; name: 
 
 export function PluginPage({ tabId, name }: { tabId: string; name: string }) {
   const theme = useTheme();
-  const windowId = useTab(tabId, (t) => t?.windowId ?? "");
   const path = useTab(tabId, (t) => pluginPagePath(t?.url ?? ""));
   const spec = usePluginPageSpec(name);
   const active = usePluginActive(name);
@@ -38,7 +37,7 @@ export function PluginPage({ tabId, name }: { tabId: string; name: string }) {
   }
   return (
     <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.card }]}>
-      <PluginPageView style={StyleSheet.absoluteFill} plugin={name} url={url} network={network} folderId={folderId} approved={approved} run={run} context={context} onOpenUrl={(e) => openPageLink(windowId, e.nativeEvent.url)} />
+      <PluginPageView style={StyleSheet.absoluteFill} plugin={name} url={url} network={network} folderId={folderId} approved={approved} run={run} context={context} />
     </View>
   );
 }

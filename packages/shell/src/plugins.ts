@@ -40,6 +40,5 @@ export type PluginPageProps = ViewProps & {
   approved: string;
   run: number;
   context: string;
-  onOpenUrl?: (e: PluginPageEvent<{ url: string }>) => void;
   onLoaded?: (e: PluginPageEvent<{ url: string; title: string }>) => void;
 };

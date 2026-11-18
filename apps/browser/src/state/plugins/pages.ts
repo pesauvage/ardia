@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type { PageSide } from "../../lib/pluginManifest";
-import { minimizedUrl, webUrl } from "../../lib/urlParts";
-import { openUrls } from "../browser/actions";
+import { minimizedUrl } from "../../lib/urlParts";
 import { useBrowser } from "../browser/store";
 import { activeTabId, viewTabIds } from "../browser/model";
 import { openSplitPane } from "../splits/actions";
@@ -118,6 +117,3 @@ export function openPluginPage(windowId: string, name: string, how: { split?: bo
   return tabId;
 }
 
-export function openPageLink(windowId: string, url: string) {
-  if (webUrl(url)) openUrls([url], windowId);
-}
