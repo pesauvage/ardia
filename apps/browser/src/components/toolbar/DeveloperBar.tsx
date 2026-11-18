@@ -60,7 +60,7 @@ export const DeveloperBar = memo(function DeveloperBar({ tabId, windowId }: { ta
             tooltip="Site Controls"
           />
           <ContextMenuArea style={{ flex: 1 }} onContextMenu={() => void showUrlBarMenu(tab)}>
-            <Pressable onPress={press("address", () => openBarFromDeveloperBar(windowId, tabId, tab.url))} style={{ flex: 1, height: ROW.button, justifyContent: "center", paddingLeft: DEVELOPER_BAR.urlGap, paddingRight: DEVELOPER_BAR.groupGap }}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Edit Address" onPress={press("address", () => openBarFromDeveloperBar(windowId, tabId, tab.url))} style={{ flex: 1, height: ROW.button, justifyContent: "center", paddingLeft: DEVELOPER_BAR.urlGap, paddingRight: DEVELOPER_BAR.groupGap }}>
               <Text numberOfLines={1} ellipsizeMode="middle" color={palette.text} style={[monoFace(), { fontSize: DEVELOPER_BAR.urlSize }]}>
                 {withoutUserInfo(tab.url)}
               </Text>
