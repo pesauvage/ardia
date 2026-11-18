@@ -201,7 +201,7 @@ leaves, the defaults unwind in the order they were applied.
 - **Launched** with `posix_spawn` in its own process group, from the plugin's folder, through
   `/usr/bin/sandbox-exec` with Ardia's fixed profile (`PluginSandbox.swift`), the paths passed as its parameters (`-D`),
   never written into the profile's text. It inherits nothing from Ardia but stdin (`/dev/null`), stdout and stderr (its
-  log, `PluginData/<name>/plugin.log`, 0600, moved to `plugin.log.1` at start past 1 MB and emptied while it runs past
+  log, `PluginData/<name>/plugin.log`, 0600, a regular file or the helper doesn't start, moved to `plugin.log.1` at start past 1 MB and emptied while it runs past
   2 MB) and the channel on descriptor 3; both ends of the channel are close-on-exec from the moment they exist. Its
   environment is only `PATH` (above), `HOME` (`PluginData/<name>/home`), `TMPDIR` (`PluginData/<name>/tmp`), `LANG`,
   `ARDIA_PLUGIN_NAME`, `ARDIA_PLUGIN_FD=3` and `ARDIA_PLUGIN_PROTOCOL=1`. A sandbox Ardia can't set up means the helper
@@ -294,7 +294,7 @@ The control socket's protocol 4 adds `plugins`, `plugins.enable` (`{"waiting": t
   command bar entries (`commands.ts`), page tabs (`pages.ts`, `pageNames.ts`), consent copy (`consent.ts`), socket methods
   (`socketMethods.ts`).
 - `platform/plugins.ts` binds `ArdiaPlugins` (`packages/shell/ios/PluginsModule.swift`, `PluginFolder.swift`,
-  `PluginProcess.swift`, `PluginCore/PluginSandbox.swift` (tested by `packages/shell/plugin-tests`, run by `swift test` in `packages/shell`), `PluginPageView.swift`, `PluginSchemeHandler.swift`).
+  `PluginProcess.swift`, `PluginCore/PluginSandbox.swift` and `PluginCore/PluginFiles.swift` (tested by `packages/shell/plugin-tests`, run by `swift test` in `packages/shell`), `PluginPageView.swift`, `PluginSchemeHandler.swift`).
 - UI: `components/settings/panes/Plugins.tsx`, `components/plugins/PluginPage.tsx` (rendered by `components/pages/InternalPage.tsx`).
 - The example plugin used by the tests: `tests/fixtures/plugins/example/`.
 

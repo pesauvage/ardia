@@ -4,7 +4,6 @@ import Foundation
 final class PluginProcess {
   static let channelFd: Int32 = 3
   static let memoryCheckInterval: TimeInterval = 10
-  static let logLimit: off_t = 1 << 20
 
   let name: String
   let run: Int
@@ -47,15 +46,6 @@ final class PluginProcess {
 
   static func errnoText(_ code: Int32 = errno) -> String { String(cString: strerror(code)) }
 
-  static func openLog(_ folder: String) -> Int32 {
-    let path = (folder as NSString).appendingPathComponent("plugin.log")
-    var info = stat()
-    if lstat(path, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_size > logLimit {
-      rename(path, path + ".1")
-    }
-    return open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW, 0o600)
-  }
-
   static func environment(name: String, data: String) -> [String] {
     [
       "PATH=" + PluginSandbox.searchPath.joined(separator: ":"),
@@ -94,7 +84,7 @@ final class PluginProcess {
     var noSigPipe: Int32 = 1
     setsockopt(pair[0], SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
     _ = fcntl(pair[0], F_SETFL, fcntl(pair[0], F_GETFL) | O_NONBLOCK)
-    let log = openLog(data)
+    let log = PluginFiles.openLog(data)
     defer { Darwin.close(pair[1]) }
     guard log >= 0 else {
       Darwin.close(pair[0])
@@ -211,7 +201,7 @@ final class PluginProcess {
 
   private func capLog() {
     var info = stat()
-    if log >= 0, fstat(log, &info) == 0, info.st_size > Self.logLimit * 2 { ftruncate(log, 0) }
+    if log >= 0, fstat(log, &info) == 0, info.st_size > PluginFiles.logLimit * 2 { ftruncate(log, 0) }
   }
 
   private func checkMemory() {
