@@ -4,7 +4,7 @@ import { failure } from "../automation/automationMethods";
 import type { Body } from "../automation/controlSocket";
 import { openSettings } from "../settings/settingsWindows";
 import { disablePlugin, removePlugin, requestPluginConsent } from "./lifecycle";
-import { activeManifest, currentPlugins, needsReview, recordOf } from "./store";
+import { activeManifest, currentPlugins, isAlwaysOn, needsReview, recordOf } from "./store";
 import { pluginRecordsSaved } from "./savedState";
 import { callTool } from "./tools";
 
@@ -47,6 +47,7 @@ export function pluginSocketMethod(method: string, params: Record<string, unknow
       return { result: { waiting: true } };
     case "plugins.disable": {
       if (!known && !leftOn) return failure("bad_request", `There's no plugin ${String(name)}.`);
+      if (isAlwaysOn(currentPlugins().listings[name])) return failure("refused", `${name} is built into Ardia and always on.`);
       const consent = consentNow();
       if (!disablePlugin(name, consent)) return failure("failed", "Couldn't save plugins.json.");
       return pluginRecordsSaved(consent).then((saved) => (saved ? { result: { ok: true } } : failure("failed", "It's off for now, but plugins.json couldn't be saved, so it may be on again after Ardia restarts.")));

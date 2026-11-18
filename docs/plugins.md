@@ -2,8 +2,8 @@
 
 A plugin is a folder with a `plugin.json` that adds to Ardia without a restart: Ardia settings it sets and rows it adds
 to Settings, command bar entries, a page of its own that opens as a tab at `ardia://<name>`, a long-running helper
-program, browser events delivered to that program, and tools the `ardia` command and other plugins can call. Issue
-#2462.
+program, browser events delivered to that program, tools the `ardia` command and other plugins can call, and commands
+it puts on your PATH. Issue #2462; programs and built-in plugins #2568.
 
 The rule behind the design: anything a first-party plugin needs becomes a public extension point here, never a private
 hook. AI features will ship as a plugin (#2463) through exactly these contributions.
@@ -17,6 +17,8 @@ and the `ardia` command's plugin commands still install and list files there.
 <config folder>/plugins/<name>/plugin.json     the manifest, and the plugin's own files beside it
 <data dir>/plugins.json                         which plugins are on, what you approved, your row values
 <data dir>/PluginData/<name>/                   the helper's home, temp folder and log
+Ardia.app/Contents/Resources/Plugins/<name>/    built-in plugins (below)
+~/Library/Application Support/Ardia/Programs/   Ardia's copies of the programs plugins put on PATH (below)
 ```
 
 - The config folder is `docs/config.md`'s (`~/.config/ardia/`, or `<data dir>/config` for a scratch instance), so a
@@ -26,6 +28,29 @@ and the `ardia` command's plugin commands still install and list files there.
 - The folder name is the plugin's `name`. A folder whose name doesn't match its manifest is listed with that problem.
 - Ardia watches the folder: a plugin appears, changes or disappears the moment its files do.
 - Installing, enabling and the rest need no restart. Turning a plugin off withdraws everything it added at once.
+
+### Built-in plugins
+
+First-party plugins ship inside the app, in `Contents/Resources/Plugins/<name>/`, built by `scripts/release.sh` from
+the `plugins` submodule (github.com/ardia-browser/plugins, `plugins/plugins/<name>/build.sh`) and signed with the app.
+They're listed in Settings › Plugins as "Built in", **off** until you turn them on, and can be turned off but not
+removed, unless they're always on (below). The command-line plugin, `cli`, is the first (the `ardia` command,
+`docs/cli.md`), and it is always on.
+
+- **Always on** (`"alwaysOn": true`, built-in plugins only; a plugin you install that declares it doesn't load) means
+  the plugin is on from the start with no consent sheet, no switch in Settings and no way to remove it: it's part of
+  the app, sealed by its signature, and its rows say "Built in, always on" with what it gets. It keeps no approval in
+  `plugins.json`; its record holds only `controlGranted` (below). `enablePlugin`, `disablePlugin`, the consent sheet and
+  `plugins.enable`/`plugins.disable` on the socket refuse it.
+
+- **Approval** (built-in plugins that aren't always on). The app's signature seals that folder, so a built-in plugin's folder identity is `bundled` instead of a
+  device and inode: Turn On approves the SHA-256 of its manifest's text with `bundled`. An update that ships the same
+  manifest stays approved; one whose manifest changes needs a new approval, like any plugin.
+- **Replacing one** is for development only. In a test instance (`ARDIA_DATA_DIR`), a folder of the same name in
+  `<config folder>/plugins/` replaces the built-in plugin, listed as "Replaces the built-in plugin"; its identity is its
+  own folder's, so the built-in plugin's approval never carries over to it. Anywhere else the built-in plugin wins and
+  its row says the folder is ignored.
+- **Test instances** read built-in plugins from `ARDIA_TEST bundledPlugins=<dir>` instead of the app.
 
 ## The manifest
 
@@ -53,6 +78,7 @@ and the `ardia` command's plugin commands still install and list files there.
   ],
   "page": { "title": "Example", "icon": "sparkles", "file": "page/index.html" },
   "process": { "run": ["/usr/bin/python3", "helper.py"], "memoryMB": 256 },
+  "programs": [{ "name": "example-tool", "path": "bin/example-tool" }],
   "hooks": ["tab.activated", "tab.navigated"],
   "tools": [{ "name": "hello", "title": "Say hello", "description": "Greets someone.", "timeout": 10 }]
 }
@@ -146,6 +172,92 @@ it is whatever is at that path when the helper starts. The approval names it ("R
 /usr/bin/python3 helper.py"), it may not live in Ardia's data or config folder, and beyond that it is trusted as
 installed, like a hook's program in `hooks.json`.
 
+### programs
+
+At most 4. Each is a command Ardia puts on your PATH while the plugin is on: `name` (like a plugin's name) is the
+command and `path` an executable file in the plugin's folder. Only the `cli` plugin may use the name `ardia`. Ardia never
+runs a plugin's program itself, with one exception for built-in plugins:
+
+- **`afterUpdate`** (built-in plugins only; a plugin you install that declares it doesn't load): up to 4 argument lists,
+  each 1 to 8 arguments, that Ardia runs the program with once per new version, in order, each with a 5 minute limit.
+  It's a fixed action the app itself declares, not something a plugin can bring: it runs the verified copy by its
+  absolute path in its own version folder (never `current` or PATH), with Ardia's environment minus its own variables,
+  no input and output to nowhere. One Ardia at a time claims the version (`.after-update-claim`, holding its process
+  id; a claim from a process that's gone is taken over) and leases it while the commands run. Each command is started
+  under the plugin's store lock and only while that version is still `current` and the request that made it the
+  latest, in a process group of its own, which is ended when its time is up and when Ardia quits. Only when every
+  command exited 0 is `.after-update` written; otherwise the next launch runs them again. The `cli` plugin runs `skills install --auto`, `skills refresh` and `computer refresh`, as
+  `install.sh` did after an upgrade.
+
+- **Turning on** copies the approved folder into a store Ardia owns,
+  `~/Library/Application Support/Ardia/Programs/<plugin>/<version>-<first 12 hex of the approval>/`. The copy is made
+  through the approved, opened folder, one directory descriptor at a time (`openat` with `O_NOFOLLOW`, each file cloned
+  with `fclonefileat` from the descriptor it was opened by), never by path, so a folder put in place after the
+  approval is never read. A link anywhere in it (a hard link too), a FIFO, socket or device, a name with control
+  characters, or a top-level `.leases`, `.after-update` or `.after-update-claim` refuses the plugin; `__pycache__`
+  folders are left behind; file modes are cut to `0755`, so set-user-ID bits and group or other write never survive.
+  Then its `plugin.json` must still hash to the approval and each program must be an executable file. An existing copy
+  is reused only if it still passes the same checks (through the opened copy) and, for a built-in, the same digest; a
+  copy that doesn't is never deleted in place, since a program may be running from it: a new one is made beside it
+  (`<version>-<approval>-r<random>`), and the old one goes once nothing leases it.
+  It gets an empty `.leases/` folder, and `current` is switched to it with one rename (`previous` keeps the version
+  before). Then `~/.local/bin/<name>` links to `Programs/<plugin>/current/<path>`, so an update never touches the link.
+  Programs run from Ardia's copy, never from the plugin's folder or the app bundle, so an app update or a replaced
+  folder never pulls files out from under a running program.
+- **PATH.** When `~/.local/bin` isn't mentioned in your shell's startup files, Ardia adds the line `install.sh` adds:
+  `export PATH="$HOME/.local/bin:$PATH"` to `~/.zprofile` (`~/.bash_profile` for bash), or
+  `contains -- $HOME/.local/bin $PATH; or set -gx PATH $HOME/.local/bin $PATH` to `~/.config/fish/conf.d/ardia.fish`.
+- **Never in the way.** A name that is already a program in `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin`,
+  `/opt/homebrew/bin` or `/usr/local/bin` isn't linked ("git would hide /usr/bin/git"), since `~/.local/bin` usually
+  comes first on PATH.
+- **Whose link.** A name that's free is linked without replacing anything, so two Ardias racing for it can't both
+  win; all of this happens under one lock for the bin folder (`Programs/.bin.lock`). Ardia replaces only a link that
+  already points into that plugin's store, or, for the built-in `cli`
+  plugin only, into the old CLI home (`~/Library/Application Support/Ardia/CLI`, adopted below). A file, or a link to
+  anywhere else, is left alone and the plugin's page says so ("~/.local/bin/ardia is someone else's; remove it to use
+  this one"); a link into another plugin's store names that plugin. Two plugins that are on never share a command.
+- **Leases.** A program that wants its version kept while it runs writes `<its version folder>/.leases/<pid>` at start
+  and removes it at exit (the folder above `bin/`; the `ardia` command does, in Rust and in Python). A lease counts
+  while that process runs and started no later than the lease's modification time, so a reused process id pins
+  nothing; others are cleared. Ardia keeps `current`, `previous` and every leased version, and deletes the rest each
+  time it links or unlinks, holding `Programs/.<plugin>.lock` while it does, so two Ardias never sweep or link the same
+  plugin at once.
+- **Turning off** removes the links that still point into the plugin's store, `current` and `previous`, and every
+  version no running process leases. Remove does the same and then deletes the plugin's store folder once nothing is
+  leased. At the first scan after launch, every link into the store whose plugin isn't on (or isn't there any more,
+  however it went) comes off, and those plugins' stores are swept; a plugin that dropped a command loses that link
+  the next time it links.
+- **Adopting the old install** (the built-in `cli` plugin): once `ardia` is linked, and while the old installer's lock
+  (`CLI/.lock`) is free, an old CLI home's `current` becomes a link to `Programs/cli/current`, so paths saved through it
+  keep working; only once it does are its old version folders deleted, each once no running `ardia` leases it; its
+  other files stay. `usage_counts.program_adoptions` counts it.
+- **Built-in plugins' files** are checked against the release: `scripts/release.sh` writes each built-in plugin's
+  payload digest (`scripts/release/plugin-digest.py`: one line per file and folder, sorted, hashed) into the
+  app's `Info.plist` as `ArdiaBuiltInPlugins`, which the app's signature covers. Ardia computes the same digest over its
+  copy before using it, and again when it reuses an existing copy, and refuses one that differs ("its files don't match the ones this Ardia was signed with"), so
+  what goes on PATH is what was signed, even if the app's folder was changed on disk. A release build refuses a built-in
+  plugin with no digest; a test instance checks only the ones listed.
+- **Which Ardia writes there.** Only an Ardia on its real data folder links into `~/.local/bin` and the store. A test
+  instance (`ARDIA_DATA_DIR`) links only into `ARDIA_INSTANCE cliBinDir=<dir>`, keeps its store in
+  `<data dir>/Programs`, adopts an old install only from `cliHome`, and runs `afterUpdate` with `HOME` at
+  `<data dir>/ProgramsHome`. Plugins belong to the data
+  folder, not to a profile, so one link serves every profile; two copies of Ardia.app on one data folder share
+  `plugins.json`, their version folders never collide, and the last to link wins.
+- **Stale requests.** Each link and unlink takes the plugin's next generation when it's asked for, and does nothing when
+  a newer one was asked for before it runs; its answer to JS is only whether it worked, which commands were linked or
+  refused and why, the bin folder, and whether an old install was adopted.
+- **PATH line.** Ardia never runs your shell's startup files to find out: when none of them has an uncommented line
+  that puts `.local/bin` on PATH, it adds one (fish's goes in its config folder, `$XDG_CONFIG_HOME` included), and it
+  records that it's done (`Programs/.path-line`) only once the line is there, so a failed write is tried again.
+- **Not sandboxed.** A program isn't a helper: you, or a program you use, run it from a shell, as you, so neither the
+  sandbox nor the plugin's other permissions apply to it, and the consent sheet says so ("Puts a command on your PATH:
+  ardia. It runs as you, outside Ardia's sandbox, …", and "Adds ~/.local/bin to your PATH in your shell's login file,
+  if it isn't there yet"). It reaches Ardia the way any program does: the control socket
+  and the token server, while "Let the ardia command control Ardia" is on (`docs/automation.md`, `docs/cli.md`).
+
+Code: `PluginCore/PluginPrograms.swift` (the store, links and leases; `plugin-tests/PluginProgramsTests.swift`),
+`PluginProgramLinks.swift` (places, PATH, the signed digests), `state/plugins/programs.ts`.
+
 ### hooks
 
 Events from Ardia's automation event table (`docs/automation.md` › Events) delivered to the helper while it subscribes
@@ -168,6 +280,7 @@ Needs a `process`.
 | `fullUrls` | Those URLs in full (needs `tabs`) |
 | `commands` | The helper may run Ardia's commands, the same ones and with the same refusals as the `ardia` command (`docs/automation.md` › Which commands) |
 | `network` | The helper may connect beyond this Mac. Without it, only to this Mac's own addresses |
+| `control` | For an always-on built-in plugin, its first link on a data folder turns on "Let the ardia command control Ardia" unless you turned that off yourself, once (`controlGranted`), as the first install of the `ardia` command always did. For any other plugin, Turn On also turns on "Let the ardia command control Ardia" (`cliControl`, `docs/automation.md`). It's the user's setting from then on: turning the plugin off leaves it as it is, and only you turn it off (Settings › Advanced, or the pill's Stop). It isn't a settings default, so nothing restores it behind your back, and `config.json` still can't set it. The consent sheet says what it means: any program you run can then drive your tabs and pages, with your logins |
 
 Contributions grant their own reach and are shown too: running a program, adding a page, adding commands, changing
 named Ardia settings, offering tools.
@@ -391,7 +504,7 @@ whichever profile the tab's window shows:
 
 ## The ardia command
 
-`ardia plugins` works on the plugin folder of the config folder it resolves (`--data-dir`, `$ARDIA_DATA_DIR`, else
+The `ardia` command is itself a plugin, the built-in `cli` (`docs/cli.md`). `ardia plugins` works on the plugin folder of the config folder it resolves (`--data-dir`, `$ARDIA_DATA_DIR`, else
 the installed app's); `enable`, `disable` and `call` need Ardia running with CLI control on.
 
 - `ardia plugins list [--json]`: each plugin, its version, whether it's on and running, what it contributes, and its
@@ -441,8 +554,10 @@ Counts only, never plugin names, titles, URLs, row values, tool input or output,
 activity began in (a tool call's outcome to the call, a helper start to the turn-on, restart or exit that asked for
 it), so a count that finishes after sharing changed stays in the local copy:
 `usage_counts.plugin_enables`, `plugin_disables`, `plugin_process_starts`, `plugin_process_crashes`,
-`plugin_commands_run`, `plugin_tool_calls`, `plugin_tool_failures`, `plugin_page_opens`, `plugin_split_opens`; the daily settings snapshot's
+`plugin_commands_run`, `plugin_tool_calls`, `plugin_tool_failures`, `plugin_page_opens`, `plugin_split_opens`,
+`program_links`, `program_link_failures` (a link refused, a name taken or the copy failed), `program_unlinks`,
+`program_adoptions` (an old `ardia` install taken over); the daily settings snapshot's
 `plugins_installed`, `plugins_enabled` and, among those on, how many use each contribution:
-`plugins_with_settings`, `plugins_with_commands`, `plugins_with_page`, `plugins_with_process`,
+`plugins_with_settings`, `plugins_with_commands`, `plugins_with_page`, `plugins_with_process`, `plugins_with_programs`,
 `plugins_with_hooks`, `plugins_with_tools`. Dashboard: watch `plugin_process_crashes` against
-`plugin_process_starts`.
+`plugin_process_starts`, and `program_link_failures` against `program_links`.

@@ -8,6 +8,8 @@ export const disablePlugin = (name: string) => turnOff(name, consentNow());
 export { restartProcess as restartPlugin } from "./process";
 export { openPluginPage, pluginPagePath } from "./pages";
 export { consentLines, type ConsentLine } from "./consent";
+export { canRelink, relinkPrograms } from "./programs";
+export { isAlwaysOn } from "./store";
 
 export const showPluginLog = (name: string) => revealPluginLog(name);
 export const showPluginsFolder = () => revealPluginsFolder();

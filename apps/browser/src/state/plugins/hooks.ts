@@ -10,6 +10,7 @@ export const usePluginRecord = (name: string) => usePlugins((s) => recordOf(s, n
 export const usePluginActive = (name: string) => usePlugins((s) => !!activeManifest(s, name));
 export const usePluginNeedsReview = (name: string) => usePlugins((s) => needsReview(s, name));
 export const usePluginProcess = (name: string) => usePlugins((s) => s.processes[name]);
+export const usePluginPrograms = (name: string) => usePlugins((s) => s.programs[name]);
 export const usePluginConsent = () => usePlugins((s) => s.consent);
 export const usePluginValues = (name: string) => usePlugins(useShallow((s: PluginsStore) => valuesOf(s, name)));
 export function usePluginPageContext(tabId: string, name: string): string {

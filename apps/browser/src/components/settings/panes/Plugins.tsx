@@ -3,13 +3,16 @@ import { View } from "react-native";
 import type { PluginManifest, RowSpec } from "../../../lib/pluginManifest";
 import { PLATFORM_FEATURES } from "../../../lib/platformFeatures";
 import { PLATFORM_TERMS } from "../../../lib/platformTerms";
-import type { ProcessState } from "../../../state/plugins/store";
+import type { PluginListing, ProcessState, ProgramsState } from "../../../state/plugins/store";
 import {
   consentLines,
   disablePlugin,
   dismissPluginConsent,
   enablePlugin,
+  isAlwaysOn,
   pluginsFolderPath,
+  relinkPrograms,
+  canRelink,
   removePlugin,
   requestPluginConsent,
   restartPlugin,
@@ -17,7 +20,7 @@ import {
   showPluginLog,
   showPluginsFolder,
 } from "../../../state/plugins/actions";
-import { usePluginActive, usePluginConsent, usePluginListing, usePluginNeedsReview, usePluginOrder, usePluginProcess, usePluginRecord, usePluginValues } from "../../../state/plugins/hooks";
+import { usePluginActive, usePluginConsent, usePluginListing, usePluginNeedsReview, usePluginOrder, usePluginProcess, usePluginPrograms, usePluginRecord, usePluginValues } from "../../../state/plugins/hooks";
 import { closeSettingsSheet, showSettingsSheet } from "../../../state/settings/sheet";
 import { goToSettingsPane, SETTINGS_WINDOW_ID, type SettingsPlace } from "../../../state/settings/settingsWindows";
 import { confirm } from "../../../state/app/system";
@@ -79,6 +82,22 @@ function processText(p: ProcessState | undefined): string | null {
   return "Its program finished";
 }
 
+function programsText(p: ProgramsState | undefined): string | null {
+  if (!p) return null;
+  if (p.state === "linking") return "Putting its commands on PATH…";
+  if (p.state === "failed") return `Its commands couldn't go on PATH: ${p.reason}`;
+  const refused = Object.values(p.refused);
+  if (refused.length) return refused.join("; ");
+  return p.linked.length ? `${p.linked.join(", ")} is on PATH (${p.binDir})` : null;
+}
+
+function originText(listing: PluginListing | undefined): string | null {
+  const builtIn = isAlwaysOn(listing) ? "Built in, always on" : "Built in";
+  if (listing?.ignoresUserFolder) return `${builtIn} (the folder of the same name in ${pluginsFolderPath()} is ignored)`;
+  if (listing?.bundled) return builtIn;
+  return listing?.replacesBundled ? "Replaces the built-in plugin" : null;
+}
+
 function statusOf(m: PluginManifest | null, problems: string[], active: boolean, review: boolean, p: ProcessState | undefined): string {
   if (!m) return problems.slice(0, 2).join("; ") || "This plugin can't load";
   if (review) return "Its plugin.json changed. Review it to turn it back on.";
@@ -102,11 +121,11 @@ function PluginRow({ name }: { name: string }) {
   return (
     <Row
       title={m ? `${m.title}${m.version ? ` ${m.version}` : ""}` : name}
-      description={statusOf(m, listing?.problems ?? [], active, review, process)}
+      description={[originText(listing), statusOf(m, listing?.problems ?? [], active, review, process)].filter(Boolean).join(" · ")}
       icon={<Symbol name={m?.page?.icon ?? "puzzlepiece"} size={14} color={theme.icon} style={ICON} />}
       onPress={() => goToSettingsPane("plugins", null, name)}
     >
-      <Toggle value={active} disabled={!m} accessibilityLabel={`Turn on ${m?.title ?? name}`} onChange={(on) => setOn(name, on || (record.enabled && review))} />
+      {isAlwaysOn(listing) ? null : <Toggle value={active} disabled={!m} accessibilityLabel={`Turn on ${m?.title ?? name}`} onChange={(on) => setOn(name, on || (record.enabled && review))} />}
     </Row>
   );
 }
@@ -141,6 +160,7 @@ function PluginPage({ name }: { name: string }) {
   const active = usePluginActive(name);
   const review = usePluginNeedsReview(name);
   const process = usePluginProcess(name);
+  const programs = usePluginPrograms(name);
   const values = usePluginValues(name);
   const m = listing?.manifest ?? null;
   if (!listing) return <PaneSubPage intro="This plugin isn't installed any more.">{null}</PaneSubPage>;
@@ -148,13 +168,21 @@ function PluginPage({ name }: { name: string }) {
     <PaneSubPage intro={m?.description || undefined}>
       <SectionHeader title={m?.title ?? name} />
       <Group>
-        <Row title={active ? "On" : review ? "Changed since you turned it on" : "Off"} description={statusOf(m, listing.problems, active, review, process)}>
-          <Toggle value={active} disabled={!m} accessibilityLabel={`Turn on ${m?.title ?? name}`} onChange={(on) => setOn(name, on)} />
+        <Row
+          title={isAlwaysOn(listing) ? "Always on" : active ? "On" : review ? "Changed since you turned it on" : "Off"}
+          description={[originText(listing), statusOf(m, listing.problems, active, review, process)].filter(Boolean).join(" · ")}
+        >
+          {isAlwaysOn(listing) ? null : <Toggle value={active} disabled={!m} accessibilityLabel={`Turn on ${m?.title ?? name}`} onChange={(on) => setOn(name, on)} />}
         </Row>
         {m?.process && active ? (
           <Row title="Its program" description={m.process.run.join(" ")}>
             <Button title="Show Log" onPress={() => showPluginLog(name)} />
             <Button title="Restart" onPress={() => restartPlugin(name)} />
+          </Row>
+        ) : null}
+        {m?.programs.length && active ? (
+          <Row title={m.programs.length === 1 ? "Its command" : "Its commands"} description={programsText(programs) ?? m.programs.map((p) => p.name).join(", ")}>
+            {canRelink(programs) ? <Button title="Try Again" onPress={() => relinkPrograms(name)} /> : null}
           </Row>
         ) : null}
       </Group>
@@ -187,11 +215,13 @@ function PluginPage({ name }: { name: string }) {
           </Group>
         </>
       )}
-      <Group>
-        <Row title="Remove" description={`Moves the plugin to the ${PLATFORM_TERMS.trash}.`}>
-          <Button title="Remove…" kind="destructive" onPress={() => void confirmRemove(name, m?.title ?? name)} />
-        </Row>
-      </Group>
+      {listing.bundled ? null : (
+        <Group>
+          <Row title="Remove" description={`Moves the plugin to the ${PLATFORM_TERMS.trash}.`}>
+            <Button title="Remove…" kind="destructive" onPress={() => void confirmRemove(name, m?.title ?? name)} />
+          </Row>
+        </Group>
+      )}
     </PaneSubPage>
   );
 }
