@@ -314,7 +314,9 @@ A plugin's page and its helper talk through Ardia, never over a port:
   that same web view, and goes only to that run; `page.post` reaches only bridges of the run that sent it. The bridge
   is revoked, and everything waiting for it dropped, whenever the page leaves its window (its tab closes, or anything
   above it is taken out), the helper restarts or the plugin is approved again; a new run or approval reloads the
-  page, and a page that comes back into a window gets a new bridge with a new view id. So a helper should answer the
+  page, and a page that comes back into a window gets a new bridge with a new view id. A bridge exists only while the
+  page is in a window: a page rebuilt while its tab is out of the window (a restart while another tab shows) gets no
+  bridge and doesn't load until it is back, then gets its bridge first and loads after. So a helper should answer the
   `view` of the latest message, or post without one. While no helper runs, `send` does nothing.
 - **The boundary is the plugin's origin.** Ardia puts `window.ardia` only into the main frame of the plugin's own
   documents, and only that frame's messages are taken. A same-origin child frame (one of the plugin's own files, or an
@@ -418,7 +420,7 @@ The control socket's protocol 4 adds `plugins`, `plugins.enable` (`{"waiting": t
   (`socketMethods.ts`).
 - `platform/plugins.ts` binds `ArdiaPlugins` (`packages/shell/ios/PluginsModule.swift`, `PluginFolder.swift`,
   `PluginProcess.swift`, `PluginCore/` (`PluginSandbox`, `PluginFiles`, `PluginProcessTree`, `PluginRuns`, `PluginLifecycle`,
-  `PluginPageMessages`, `PluginPageOutbox`, `PluginPageOffline`; tested by `packages/shell/plugin-tests`, run by `swift test` in `packages/shell`), `PluginPageView.swift`, `PluginSchemeHandler.swift`).
+  `PluginPageMessages`, `PluginPageOutbox`, `PluginPageGate`, `PluginPageOffline`; tested by `packages/shell/plugin-tests`, run by `swift test` in `packages/shell`), `PluginPageView.swift`, `PluginSchemeHandler.swift`).
 - UI: `components/settings/panes/Plugins.tsx`, `components/plugins/PluginPage.tsx` (rendered by `components/pages/InternalPage.tsx`).
 - The example plugin used by the tests: `tests/fixtures/plugins/example/`.
 

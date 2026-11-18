@@ -47,7 +47,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   let onLoaded = EventDispatcher()
 
   var plugin = "" { didSet { if plugin != oldValue { rebuild() } } }
-  var url = "" { didSet { if url != oldValue { load() } } }
+  var url = "" { didSet { if url != oldValue { gate.wantsLoad() } } }
   var network = false { didSet { if network != oldValue { rebuild() } } }
   var folderId = "" { didSet { if folderId != oldValue { rebuild() } } }
   var approved = "" { didSet { if approved != oldValue { rebuild() } } }
@@ -61,6 +61,10 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   private var allowedOrigin: (scheme: String, host: String, port: Int?)?
 
   private let watcher = WindowWatcher()
+  private lazy var gate = PluginPageGate(
+    bind: { [weak self] in self?.bindBridge() },
+    unbind: { [weak self] in self?.bridge?.revoke() },
+    load: { [weak self] in self?.loadNow() })
 
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
@@ -70,14 +74,11 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   }
 
   private func windowChanged(_ inWindow: Bool) {
-    if !inWindow {
-      bridge?.revoke()
-    } else if let web, bridge?.revoked ?? true {
-      attachBridge(to: web)
-    }
+    gate.windowChanged(inWindow: inWindow)
   }
 
-  private func attachBridge(to web: WKWebView) {
+  private func bindBridge() {
+    guard let web else { return }
     bridge?.revoke()
     let controller = web.configuration.userContentController
     controller.removeScriptMessageHandler(forName: "ardia", contentWorld: .page)
@@ -104,7 +105,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
   }
 
   private func rebuild() {
-    bridge?.revoke()
+    gate.pageRemoved()
     bridge = nil
     web?.removeFromSuperview()
     web = nil
@@ -125,7 +126,6 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
       NSLog("[plugins] %@'s page isn't shown: its web view didn't keep the offline settings", plugin)
       return
     }
-    attachBridge(to: view)
     view.navigationDelegate = self
     view.uiDelegate = self
     view.autoresizingMask = [.width, .height]
@@ -133,7 +133,8 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
     addSubview(view)
     web = view
     Self.live[plugin] = self
-    load()
+    gate.pageCreated(inWindow: window != nil)
+    gate.wantsLoad()
   }
 
   override func setFrameSize(_ newSize: NSSize) {
@@ -178,7 +179,7 @@ final class PluginPageView: ExpoView, WKNavigationDelegate, WKUIDelegate {
 
 
 
-  private func load() {
+  private func loadNow() {
     guard let web, let target = URL(string: url), let origin = Self.origin(of: target), origin.scheme == PluginSchemeHandler.scheme, origin.host == plugin else { return }
     allowedOrigin = origin
     web.load(URLRequest(url: target))
