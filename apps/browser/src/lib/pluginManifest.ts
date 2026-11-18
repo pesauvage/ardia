@@ -210,7 +210,7 @@ function command(c: Check, path: string, value: unknown): CommandSpec | null {
   }
   let action: CommandAction | null = null;
   if (doc.tool !== undefined) {
-    for (const key of ["context", "side", "sideSetting"]) if (doc[key] !== undefined) c.problems.push(`${path}.${key} only goes with open`);
+    for (const key of ["context", "side", "sideSetting", "path"]) if (doc[key] !== undefined) c.problems.push(`${path}.${key} only goes with open`);
     const tool = matching(c, `${path}.tool`, doc.tool, NAME, "a tool's name");
     const input = doc.input === undefined ? {} : object(c, `${path}.input`, doc.input);
     action = tool && input ? { tool, input } : null;

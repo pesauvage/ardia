@@ -154,7 +154,7 @@ def command_problems(commands: list[dict], rows: list[dict], tools: list[dict], 
             problems.append(f'{at} needs either tool (one of the plugin\'s tools) or open ("tab" or "split")')
             continue
         if has_tool:
-            problems += [f"{at}.{key} only goes with open" for key in ("context", "side", "sideSetting") if key in command]
+            problems += [f"{at}.{key} only goes with open" for key in ("context", "side", "sideSetting", "path") if key in command]
             if command["tool"] not in tool_names:
                 problems.append(f"{at}.tool: {command['tool']} isn't one of this plugin's tools")
             continue
